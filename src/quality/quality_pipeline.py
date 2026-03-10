@@ -3,7 +3,7 @@
 #Run all data validation checks
 #==================================================
 
-from missing_check import run_missing_check, run_missung_check
+from missing_check import run_missing_check
 from duplicate_check import run_duplicate_check
 from gap_check import run_gap_check
 from schema_validation import run_schema_validation

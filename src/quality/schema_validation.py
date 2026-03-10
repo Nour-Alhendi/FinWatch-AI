@@ -129,7 +129,7 @@ def check_schema(file_path):
 
     if not pd.api.types.is_integer_dtype(df["Volume"]):
         try:
-            df["Volume"] = df["Volume"].astype("Int64")
+            df["Volume"] = df["Volume"].astype(float).round(0).astype("Int64")
             changes.append("Converted Volume to integer")
             print(f"  INFO: Converted Volume to integer")
         except Exception:
