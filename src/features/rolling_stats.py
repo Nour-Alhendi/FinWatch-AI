@@ -8,8 +8,8 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 # calculate rolling stats
 def rolling_stats(file_path):
     df = pd.read_parquet(file_path)
-    df["rolling_mean"] = df["Close"].rolling(20).mean()
-    df["rolling_std"]  = df["Close"].rolling(20).std()
+    df["rolling_mean"] = df["returns"].rolling(20).mean()
+    df["rolling_std"]  = df["returns"].rolling(20).std()
     return df
 
 # loops overall files and save results
