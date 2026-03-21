@@ -1,3 +1,6 @@
+# Measures how much the stock moves relative to the market (SPX) over 60 days.
+# Columns: beta
+
 import pandas as pd
 from pathlib import Path
 

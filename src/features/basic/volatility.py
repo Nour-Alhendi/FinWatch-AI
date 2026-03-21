@@ -1,3 +1,6 @@
+# Calculates 20-day rolling standard deviation of returns as a volatility measure.
+# Columns: volatility
+
 import pandas as pd
 from pathlib import Path
 

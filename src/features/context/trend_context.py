@@ -1,12 +1,12 @@
-# ––– trend_context: detects the market regime (bull/bear/transition/sideways) using MA50 & MA200 –––
-# then joins it onto each stock's context file
+# Detects market regime using MA50 and MA200, then joins it onto each stock's feature file.
+# Columns: regime, ma50, ma200, regime_encoded
 
 import pandas as pd
 from pathlib import Path
 import numpy as np
 
 INPUT_DIR = Path("data/detection")
-OUTPUT_DIR = Path("data/context")
+OUTPUT_DIR = Path("data/features")
 
 # Detect the current market regime using MA50 & MA200 (Trend Following)
 def detect_regime():
@@ -35,6 +35,8 @@ def run_trend_context():
     for file in OUTPUT_DIR.glob("*.parquet"):
         df = pd.read_parquet(file)
         df = df.set_index("Date").join(regime_df, how="left").reset_index()
+        regime_map = {"bull": 1, "bear": -1, "transition_up": 0.5, "transition_down": -0.5, "sideways": 0, "unknown": 0}
+        df["regime_encoded"] = df["regime"].map(regime_map)
         df.to_parquet(OUTPUT_DIR / file.name)
         print(f"Saved: {file.name}")
 

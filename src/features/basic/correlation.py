@@ -1,3 +1,6 @@
+# Calculates 60-day rolling correlation between stock returns and SPX returns.
+# Columns: corr_spx
+
 import pandas as pd
 from pathlib import Path
 

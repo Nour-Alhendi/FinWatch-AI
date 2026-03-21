@@ -1,66 +1,71 @@
+# LSTM Autoencoder for anomaly detection.
+# Trains on calm periods (low volatility) and flags sequences with high reconstruction error.
+# Columns: ae_error, ae_anomaly
+
+import sys
 import numpy as np
 import pandas as pd
 from pathlib import Path
-import tensorflow as tf
-from tensorflow.keras import layers, losses
+from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Input, LSTM, RepeatVector, TimeDistributed, Dense
+from tensorflow.keras.callbacks import EarlyStopping
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from config.features import LSTM_AE_FEATURES
 
-INPUT_DIR = Path("data/detection")
-OUTPUT_DIR = Path("data/detection")
-OUTPUT_DIR.mkdir(parents = True, exist_ok = True)
+INPUT_DIR = Path("data/features")
+OUTPUT_DIR = Path("data/features")
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-# encoder: 4 features → 2 neurons, decoder: 2 → 4
-class Autoencoder(Model):
-    def __init__(self):
-        super().__init__()
-        self.encoder = layers.Dense(2, activation="relu")
-        self.decoder = layers.Dense(4, activation="sigmoid")
+SEQUENCE_LENGTH = 30
+N_FEATURES = len(LSTM_AE_FEATURES)
 
-    def call(self, inputs, training=None, mask=None):
-        encoded = self.encoder(inputs)
-        decoded = self.decoder(encoded)
-        return decoded
-
-# train autoencoder and flag rows with high reconstruction error
-def autoencoder(file_path):
-    df = pd.read_parquet(file_path)
-    features = ["returns", "volatility", "z_score", "rolling_std"]
-    X = df[features].dropna()
-
-    # normalize to 0-1 (required for sigmoid output)
-    X_scaled = (X - X.min()) / (X.max() - X.min())
-    X_scaled = X_scaled.values.astype("float32")
-
-    # train only on statistically normal rows
-    normal_mask = df.loc[X.index, "z_anomaly"] == False
-    X_train = X[normal_mask]
-    X_train_scaled = (X_train - X_train.min()) / (X_train.max() - X_train.min())
-    X_train_scaled = X_train_scaled.values.astype("float32")
-
-    # train model - input = output (autoencoder trick)
-    model = Autoencoder()
+def build_model():
+    input_layer = Input(shape=(SEQUENCE_LENGTH, N_FEATURES))
+    encoded = LSTM(32, activation="relu")(input_layer)
+    repeated = RepeatVector(SEQUENCE_LENGTH)(encoded)
+    decoded = LSTM(32, activation="relu", return_sequences=True)(repeated)
+    output_layer = TimeDistributed(Dense(N_FEATURES))(decoded)
+    model = Model(inputs=input_layer, outputs=output_layer)
     model.compile(optimizer="adam", loss="mse")
-    model.fit(X_train_scaled, X_train_scaled, epochs=20, batch_size=32, verbose=0)
-    
-    # reconstruction error: high error = anomaly
-    reconstructed = model.predict(X_scaled, verbose=0)
-    errors = np.mean((X_scaled - reconstructed) ** 2, axis=1)
-    threshold = np.percentile(errors, 95)
-    df.loc[X.index, "ae_error"] = errors
-    df.loc[X.index, "ae_anomaly"] = errors > threshold
-    return df
+    return model
 
-# loops over all files and saves results
 def run_autoencoder():
     for file in INPUT_DIR.glob("*.parquet"):
-        df = autoencoder(file)
+        if file.stem == "^SPX":
+            continue
+
+        df = pd.read_parquet(file)
+        df = df[df["Date"] >= "2022-01-01"].reset_index(drop=True)
+        df = df.dropna(subset=LSTM_AE_FEATURES).reset_index(drop=True)
+
+        # Train only on calm periods
+        normal_mask = df["volatility"] < df["volatility"].quantile(0.75)
+        df_train = df[normal_mask].reset_index(drop=True)
+
+        scaler = MinMaxScaler()
+        scaled_train = scaler.fit_transform(df_train[LSTM_AE_FEATURES])
+        scaled_all = scaler.transform(df[LSTM_AE_FEATURES])
+
+        X_train = np.array([scaled_train[i-SEQUENCE_LENGTH:i] for i in range(SEQUENCE_LENGTH, len(scaled_train))])
+        X_all = np.array([scaled_all[i-SEQUENCE_LENGTH:i] for i in range(SEQUENCE_LENGTH, len(scaled_all))])
+
+        early_stop = EarlyStopping(monitor="val_loss", patience=5, restore_best_weights=True)
+        model = build_model()
+        model.fit(X_train, X_train, epochs=50, batch_size=32,
+                  validation_split=0.1, callbacks=[early_stop], verbose=0)
+
+        X_pred = model.predict(X_all, verbose=0)
+        errors = np.mean(np.abs(X_all - X_pred), axis=(1, 2))
+        threshold = np.percentile(errors, 95)
+
+        df["ae_error"] = np.nan
+        df["ae_anomaly"] = False
+        df.loc[SEQUENCE_LENGTH:len(df)-1, "ae_error"] = errors
+        df.loc[SEQUENCE_LENGTH:len(df)-1, "ae_anomaly"] = errors > threshold
+
         df.to_parquet(OUTPUT_DIR / file.name)
         print(f"Saved: {file.name}")
-        
 
-# Entry point
-if __name__ =="__main__":
+if __name__ == "__main__":
     run_autoencoder()
-
-
-    

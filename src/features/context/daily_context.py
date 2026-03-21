@@ -1,4 +1,5 @@
-# ––– daily_context: Was this anomaly caused by the stock itself or was the whole market/sector moving? –––
+# Compares each stock's return against SPX and its sector ETF to identify market-wide vs stock-specific moves.
+# Columns: spx_return, etf_return, is_market_wide, is_sector_wide, excess_return, relative_return, sector_relative
 
 import pandas as pd
 import yaml
@@ -10,7 +11,7 @@ assets = config["assets"]
 sector_etfs = config["sector_etfs"]
 
 INPUT_DIR = Path("data/detection")
-OUTPUT_DIR = Path("data/context")
+OUTPUT_DIR = Path("data/features")
 REF_DIR = Path("data/raw/references")
 TICKERS = [a["ticker"] for a in assets if a["sector"] != "Index"]
 
@@ -51,6 +52,10 @@ def compare(df, spx, etf_data, ticker):
 
     # How much did the stock move beyond the market?
     df["excess_return"] = df["returns"] - df["spx_return"]
+
+    # Relative performance vs market and sector
+    df["relative_return"] = df["returns"] - df["spx_return"]
+    df["sector_relative"] = df["returns"] - df["etf_return"]
 
     return df.reset_index()
 

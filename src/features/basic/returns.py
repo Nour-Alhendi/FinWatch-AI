@@ -1,3 +1,6 @@
+# Calculates daily percentage change in Close price.
+# Columns: returns
+
 import pandas as pd
 from pathlib import Path
 

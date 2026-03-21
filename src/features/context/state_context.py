@@ -1,12 +1,11 @@
-# ––– state_context: How extreme is the current market environment? –––
-# Volatility Regime: is the market calm or turbulent right now?
-# Volume Analysis: is today's trading volume unusual?
+# Adds volatility regime (low/moderate/high) from SPX and volume analysis per stock.
+# Columns: vol_regime, volume_ma20, volume_zscore, is_high_volume
 
 import pandas as pd
 from pathlib import Path
 
 INPUT_DIR = Path("data/detection")
-OUTPUT_DIR = Path("data/context")
+OUTPUT_DIR = Path("data/features")
 
 # Volatility regime
 def detect_vol_regime():
