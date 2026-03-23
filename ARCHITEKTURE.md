@@ -1,69 +1,90 @@
 # FinWatch AI
 ––––––––––––––
 
-Produktname:     FinWatch AI
+Product Name:    FinWatch AI
 GitHub Repo:     finwatch-ai
-Beschreibung:    AI-Driven Financial Anomaly Detection
+Description:     AI-Driven Financial Anomaly Detection
                  and Monitoring System
 
 
 
 # LAYER 1 – DATA INGESTION
 ├── Stooq API (historical, 10 years, daily)
-├── 11 Stocks, OHLCV
-└── Output: raw_clean parquet files
+├── 55 Stocks, OHLCV (Tech, Finance, Health, Energy, Industrials, Green Energy)
+├── 10 Reference ETFs (SPX, XLK, XLF, XLV, XLP, XLE, XLY, XLI, BOTZ, ICLN)
+└── Output: raw_clean parquet files (data/raw/raw_clean/)
 
 # LAYER 2 – DATA QUALITY CHECKS
+├── Schema validation
 ├── Missing values
 ├── Duplicates
 ├── OHLC violations
-└── Output: validated data
+└── Output: validated parquet files
 
 # LAYER 3 – FEATURE ENGINEERING
-├── Daily Returns
-├── Volatility
-├── Rolling Stats (mean, std)
-├── Beta
-├── Correlation
-└── Output: feature parquet files
+│
+├── 3A: Basic Features
+│   ├── returns, volatility
+│   ├── rolling_mean, rolling_std (20d + 60d)
+│   ├── beta, corr_spx
+│   └── rsi
+│
+├── 3B: Context Features
+│   ├── spx_return, etf_return
+│   ├── is_market_wide, is_sector_wide   (pure market signal, no anomaly)
+│   ├── excess_return, relative_return, sector_relative
+│   ├── regime (bull/bear/transition), ma50, ma200, regime_encoded
+│   └── vol_regime, volume_ma20, volume_zscore, is_high_volume
+│
+└── 3C: Advanced Features
+    ├── return_lag_1/2/3, momentum_5/10
+    ├── vol_5, vol_20, vol_change
+    ├── trend_strength
+    ├── volatility_ratio (vs SPX)
+    └── volume_trend
 
 # LAYER 4 – ANOMALY DETECTION
-├── Statistical:    Z-Score (threshold ±3σ)
-├── ML:             Isolation Forest (contamination=0.05)
-├── Deep Learning:  Autoencoder (reconstruction error)
-├── Combine:        anomaly_score (0–3), combined_anomaly
-├── Severity:       MINOR / WARNING / CRITICAL  (script within detection)
-└── Output: anomaly flags + severity label per model
+│
+├── Statistical:    Z-Score (±3σ, 20d + 60d window)
+├── ML:             Isolation Forest (group-aware, contamination=0.05)
+├── Deep Learning:  Dual LSTM Autoencoder
+│   ├── low_vol_model  → trained on calm periods per group
+│   ├── high_vol_model → trained on volatile periods per group
+│   ├── regime-specific thresholds (no lookahead)
+│   └── cooldown=3 to prevent clustering
+├── Combine:
+│   ├── anomaly_score (0–4): z + z_60 + if + ae
+│   ├── combined_anomaly (bool)
+│   ├── market_anomaly  = is_market_wide  & combined_anomaly
+│   └── sector_anomaly  = is_sector_wide  & combined_anomaly
+├── Severity:       MINOR / WARNING / CRITICAL
+└── Output: data/detection/ parquet files
 
-# LAYER 5 – CONTEXTUAL VALIDATION
-├── Compare stock vs S&P 500
-├── Compare stock vs VIX
-├── News Sentiment (FinBERT)
-└── Output: context enriched anomaly
+# LAYER 5 – RISK PREDICTION
+├── XGBoost Classifier
+│   ├── Features: anomaly_score, returns, volatility, rsi,
+│   │             relative_return, trend_strength, momentum_5,
+│   │             vol_change, volume_zscore
+│   ├── Labels (forward-looking, 5 days):
+│   │   ├── low    → max drawdown < 1%
+│   │   ├── medium → max drawdown 1–3%
+│   │   └── high   → max drawdown > 3%
+│   └── Output: risk_level + p_low, p_medium, p_high per ticker
+└── Output: models/xgboost_risk.pkl
 
-# LAYER 6 – PREDICTION CORRIDOR
-├── LSTM (last 30 days OHLCV) → predicted_close
-├── prediction_error = |actual - predicted| / predicted
-├── XGBoost Classifier:
-│   ├── Input: anomaly_score + severity + z_score + prediction_error
-│   ├── P(up)     %
-│   ├── P(stable) %
-│   └── P(down)   %
-└── Output: predicted price + direction probabilities
-
-# LAYER 7 – GUARDRAILS + AI AGENT
+# LAYER 6 – GUARDRAILS + DECISION ENGINE
 ├── FIX:       auto-correct data issues
 ├── KEEP:      flag but keep
 ├── ESCALATE:  alert human
-└── Output: autonomous decision
+└── Output: autonomous decision per ticker
 
-# LAYER 8 – REPORTING + XAI
+# LAYER 7 – REPORTING + XAI
 ├── Automatic report per ticker
-├── Explanation WHY anomaly
-├── News context
+├── SHAP explanation (why this risk level?)
+├── Anomaly context (market-wide vs stock-specific)
 └── Output: PDF/HTML report
 
-# LAYER 9 – LOGGING & AUDIT
+# LAYER 8 – LOGGING & AUDIT
 ├── All decisions logged
 ├── Timestamp + model + reason
 └── Output: audit trail
