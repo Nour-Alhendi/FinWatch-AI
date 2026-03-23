@@ -5,12 +5,12 @@ import pandas as pd
 import yaml
 from pathlib import Path
 
-with open ("config/assets.yaml", "r") as f:
+with open (Path(__file__).parents[3] / "config/assets.yaml", "r") as f:
     config = yaml.safe_load(f)
 assets = config["assets"]
 sector_etfs = config["sector_etfs"]
 
-INPUT_DIR = Path("data/detection")
+INPUT_DIR = Path("data/features")
 OUTPUT_DIR = Path("data/features")
 REF_DIR = Path("data/raw/references")
 TICKERS = [a["ticker"] for a in assets if a["sector"] != "Index"]
@@ -42,6 +42,7 @@ def compare(df, spx, etf_data, ticker):
     etf_col = f"{etf_name}_close"
     if etf_col in df.columns:
         df = df.drop(columns=[etf_col])
+    df = df.drop(columns=[c for c in ["regime", "ma200", "ma50", "regime_encoded"] if c in df.columns])
     df = df.join(spx, how="left")
     df = df.join(etf_df, how="left")
 
@@ -50,10 +51,10 @@ def compare(df, spx, etf_data, ticker):
     df["etf_return"] = df[etf_col].pct_change()
 
     # True if market also moved strongly that day (systemic, not stock-specific)
-    df["is_market_wide"] = (df["spx_return"].abs() > 0.02) & df["combined_anomaly"]
+    df["is_market_wide"] = (df["spx_return"].abs() > 0.02)
 
     # True if sector also moved strongly that day (sector-wide, not stock-specific)
-    df["is_sector_wide"] = (df["etf_return"].abs() > 0.025) & df["combined_anomaly"]
+    df["is_sector_wide"] = (df["etf_return"].abs() > 0.025)
 
     # How much did the stock move beyond the market?
     df["excess_return"] = df["returns"] - df["spx_return"]

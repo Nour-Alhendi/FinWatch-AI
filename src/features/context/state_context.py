@@ -4,7 +4,7 @@
 import pandas as pd
 from pathlib import Path
 
-INPUT_DIR = Path("data/detection")
+INPUT_DIR = Path("data/features")
 OUTPUT_DIR = Path("data/features")
 
 # Volatility regime
@@ -34,6 +34,7 @@ def run_state_context():
     vol_regime_df = detect_vol_regime()
     for file in OUTPUT_DIR.glob("*.parquet"):
         df = pd.read_parquet(file)
+        df = df.drop(columns=[c for c in ["vol_regime", "volume_ma20", "volume_zscore", "is_high_volume"] if c in df.columns])
         df = df.set_index("Date").join(vol_regime_df, how="left").reset_index()
         df.to_parquet(OUTPUT_DIR / file.name)
         print(f"Saved: {file.name}")

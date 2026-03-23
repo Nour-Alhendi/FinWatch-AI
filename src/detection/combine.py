@@ -19,6 +19,9 @@ def combine(file_path):
         df["ae_anomaly"].fillna(False).astype(int)
     )
     df["combined_anomaly"] = df["anomaly_score"] > 0
+    df["market_anomaly"] = df["is_market_wide"] & df["combined_anomaly"]
+    df["sector_anomaly"] = df["is_sector_wide"] & df["combined_anomaly"]
+
     return df
 
 

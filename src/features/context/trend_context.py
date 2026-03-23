@@ -5,7 +5,7 @@ import pandas as pd
 from pathlib import Path
 import numpy as np
 
-INPUT_DIR = Path("data/detection")
+INPUT_DIR = Path("data/features")
 OUTPUT_DIR = Path("data/features")
 
 # Detect the current market regime using MA50 & MA200 (Trend Following)
@@ -34,6 +34,7 @@ def run_trend_context():
     regime_df = detect_regime()
     for file in OUTPUT_DIR.glob("*.parquet"):
         df = pd.read_parquet(file)
+        df = df.drop(columns=[c for c in ["regime", "ma200", "ma50", "regime_encoded"] if c in df.columns])
         df = df.set_index("Date").join(regime_df, how="left").reset_index()
         regime_map = {"bull": 1, "bear": -1, "transition_up": 0.5, "transition_down": -0.5, "sideways": 0, "unknown": 0}
         df["regime_encoded"] = df["regime"].map(regime_map)

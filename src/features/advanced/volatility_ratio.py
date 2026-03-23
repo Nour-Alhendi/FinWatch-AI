@@ -6,7 +6,7 @@ from pathlib import Path
 
 INPUT_DIR = Path("data/features")
 OUTPUT_DIR = Path("data/features")
-SPX_FILE = Path("data/detection") / "^SPX.parquet"
+SPX_FILE = Path("data/features") / "^SPX.parquet"
 
 def load_spx_volatility():
     df = pd.read_parquet(SPX_FILE)
