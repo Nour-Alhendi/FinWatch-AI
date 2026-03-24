@@ -1,5 +1,5 @@
-# Calculates 20-day rolling mean and standard deviation of returns.
-# Columns: rolling_mean, rolling_std
+# Calculates 20-day and 60-day rolling mean and standard deviation of returns.
+# Columns: rolling_mean, rolling_std, rolling_mean_60, rolling_std_60
 
 import pandas as pd
 from pathlib import Path

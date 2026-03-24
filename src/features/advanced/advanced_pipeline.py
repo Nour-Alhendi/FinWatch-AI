@@ -17,17 +17,17 @@ def run_advanced_features():
 
     print("2) Momentum")
     run_momentum()
-    
+
     print("3) Vol Change")
     run_vol_change()
-    
+
     print("4) Trend Strength")
     run_trend_strength()
-    
+
     print("5) Volatility Ratio")
     run_volatility_ratio()
-    
-    print("6) Volume Trend") 
+
+    print("6) Volume Trend")
     run_volume_trend()
 
 
