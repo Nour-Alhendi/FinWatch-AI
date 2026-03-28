@@ -66,7 +66,8 @@ def get_errors(model, X):
 
 def run_autoencoder():
     early_stop = EarlyStopping(monitor="val_loss", patience=10, restore_best_weights=True)
-
+    Path("models").mkdir(exist_ok=True)
+    split_date = pd.Timestamp("2024-01-01")
     for group_name, params in GROUPS.items():
         tickers  = params["tickers"]
         calm_q   = params["calm_q"]
@@ -81,7 +82,6 @@ def run_autoencoder():
                 continue
             df = pd.read_parquet(file)
             df = df.dropna(subset=LSTM_AE_FEATURES).reset_index(drop=True)
-            split_date = pd.Timestamp("2024-01-01")
             df["_is_train"] = df["Date"] < split_date
             df["_ticker"] = ticker
             frames.append(df)
@@ -132,21 +132,36 @@ def run_autoencoder():
         X_train_high = np.concatenate(X_train_high) if X_train_high else None
 
         # Train dual models
-        model_low = build_model()
-        if X_train_low is not None:
-            model_low.fit(X_train_low, X_train_low,
-                          epochs=30, batch_size=32,
-                          validation_split=0.1,
-                          callbacks=[early_stop], verbose=0)
-            print(f"[{group_name}] low_vol_model trained on {X_train_low.shape[0]} sequences")
+        low_path  = Path(f"models/ae_{group_name}_low.keras")
+        high_path = Path(f"models/ae_{group_name}_high.keras")
 
-        model_high = build_model()
-        if X_train_high is not None:
-            model_high.fit(X_train_high, X_train_high,
-                           epochs=30, batch_size=32,
-                           validation_split=0.1,
-                           callbacks=[early_stop], verbose=0)
-            print(f"[{group_name}] high_vol_model trained on {X_train_high.shape[0]} sequences")
+        if low_path.exists():
+            from tensorflow.keras.models import load_model
+            model_low = load_model(low_path)
+            print(f"[{group_name}] low_vol_model loaded from disk")
+        else:
+            model_low = build_model()
+            if X_train_low is not None:
+                model_low.fit(X_train_low, X_train_low,
+                              epochs=30, batch_size=32,
+                              validation_split=0.1,
+                              callbacks=[early_stop], verbose=0)
+                model_low.save(low_path)
+                print(f"[{group_name}] low_vol_model trained and saved")
+
+        if high_path.exists():
+            from tensorflow.keras.models import load_model
+            model_high = load_model(high_path)
+            print(f"[{group_name}] high_vol_model loaded from disk")
+        else:
+            model_high = build_model()
+            if X_train_high is not None:
+                model_high.fit(X_train_high, X_train_high,
+                               epochs=30, batch_size=32,
+                               validation_split=0.1,
+                               callbacks=[early_stop], verbose=0)
+                model_high.save(high_path)
+                print(f"[{group_name}] high_vol_model trained and saved")
 
         # Predict and save per ticker
         for (df, low_df_train, high_df_train, scaler_low, scaler_high) in low_frames:

@@ -1,7 +1,9 @@
 """
-FinWatch AI — Layer 7E: News + FinBERT
-=======================================
-Takes LLM Narrator output and enriches it with news sentiment using FinBERT.
+FinWatch AI — Layer 7E: News + Sentiment Analysis
+==================================================
+Takes LLM Narrator output and enriches it with news sentiment using VADER.
+VADER (Valence Aware Dictionary and sEntiment Reasoner) is lightweight,
+requires no model download, and is well-suited for financial news headlines.
 
 Output: ticker + llm_summary + top_news + news_sentiment
 """
@@ -11,34 +13,21 @@ import time
 import logging
 import pandas as pd
 from pathlib import Path
-import torch
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 import requests
 
 ROOT = Path(__file__).resolve().parents[2]
 
-FINBERT_LABELS  = ["neutral", "positive", "negative"]
 FINNHUB_API_KEY = os.environ.get("FINNHUB_API_KEY")
 NEWS_ENDPOINT   = "https://finnhub.io/api/v1/company-news"
 
-# Lazy-loaded singletons — populated on first call to enrich_with_news()
-_TOKENIZER = None
-_MODEL     = None
+_ANALYZER = SentimentIntensityAnalyzer()
 
 
-def _load_model():
-    """Load FinBERT once and cache in module-level singletons."""
-    global _TOKENIZER, _MODEL
-    if _TOKENIZER is None:
-        from transformers import AutoTokenizer, AutoModelForSequenceClassification
-        print("Loading FinBERT model (first use)...")
-        _TOKENIZER = AutoTokenizer.from_pretrained("yiyanghkust/finbert-tone")
-        _MODEL     = AutoModelForSequenceClassification.from_pretrained("yiyanghkust/finbert-tone")
-        print("FinBERT model ready.")
-
-
-def fetch_news(ticker: str, limit: int = 3, retries: int = 3) -> list[str]:
+def fetch_news(ticker: str, limit: int = 3, retries: int = 3):
+    """Returns (headlines, sources). Finnhub proxy URLs are unreliable, so we store source names instead."""
     if not FINNHUB_API_KEY:
-        return []
+        return [], []
 
     from datetime import date, timedelta
     today = date.today()
@@ -56,8 +45,11 @@ def fetch_news(ticker: str, limit: int = 3, retries: int = 3) -> list[str]:
             articles = r.json()
             if not isinstance(articles, list):
                 logging.warning(f"[finbert] Unexpected response for {ticker}: {articles}")
-                return []
-            return [a["headline"] for a in articles[:limit] if "headline" in a]
+                return [], []
+            valid   = [a for a in articles[:limit] if "headline" in a]
+            headlines = [a["headline"] for a in valid]
+            sources   = [a.get("source", "") for a in valid]
+            return headlines, sources
         except requests.exceptions.HTTPError as e:
             status = e.response.status_code if e.response else "?"
             if status == 429:
@@ -66,35 +58,41 @@ def fetch_news(ticker: str, limit: int = 3, retries: int = 3) -> list[str]:
                 time.sleep(wait)
             else:
                 logging.error(f"[finbert] HTTP {status} for {ticker}: {e}")
-                return []
+                return [], []
         except Exception as e:
             logging.error(f"[finbert] Request failed for {ticker}: {e}")
-            return []
+            return [], []
 
     logging.error(f"[finbert] All {retries} retries failed for {ticker}.")
-    return []
+    return [], []
 
 
 def analyze_sentiment(headline: str) -> str:
-    _load_model()
-    inputs = _TOKENIZER(headline, return_tensors="pt", truncation=True, max_length=128)
-    with torch.no_grad():
-        outputs = _MODEL(**inputs)
-    pred = torch.argmax(outputs.logits, dim=1).item()
-    return FINBERT_LABELS[pred]
+    """Classify a headline as positive / negative / neutral using VADER compound score."""
+    score = _ANALYZER.polarity_scores(headline)["compound"]
+    if score >= 0.05:
+        return "positive"
+    elif score <= -0.05:
+        return "negative"
+    else:
+        return "neutral"
 
 
 def enrich_with_news(df: pd.DataFrame) -> pd.DataFrame:
     """Adds top news + FinBERT sentiment to LLM output."""
     enriched = []
-    for _, row in df.iterrows():
+    total = len(df)
+    for i, (_, row) in enumerate(df.iterrows(), 1):
         ticker    = row["ticker"]
-        news_list = fetch_news(ticker)
+        print(f"  [{i}/{total}] {ticker}...")
+        news_list, source_list = fetch_news(ticker, retries=1)
+        time.sleep(1.5)
         sentiments = [analyze_sentiment(h) for h in news_list]
         enriched.append({
             "ticker":         ticker,
             "llm_summary":    row["llm_summary"],
             "top_news":       news_list,
+            "news_sources":   source_list,
             "news_sentiment": sentiments,
         })
     return pd.DataFrame(enriched)

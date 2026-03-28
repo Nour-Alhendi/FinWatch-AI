@@ -33,18 +33,20 @@ from typing import Optional
 
 # ── Constants ─────────────
 
-# Hard override thresholds
-DRAWDOWN_CRITICAL   = -0.05     # -5%  → always CRITICAL regardless of other signals
-DRAWDOWN_WARNING    = -0.03     # -3%  → at least WARNING if risk=high
+# Hard override thresholds — used as CAPS in the dynamic formula:
+#   DRAWDOWN_WARNING  = max(-0.08, -1 * vol)   → tighter for calm stocks, capped at -8% for volatile
+#   DRAWDOWN_CRITICAL = max(-0.15, -2 * vol)   → tighter for calm stocks, capped at -15% for volatile
+# Stored as fallback caps; actual per-ticker thresholds computed in decide() using inp.volatility.
+DRAWDOWN_WARNING_CAP  = -0.08
+DRAWDOWN_CRITICAL_CAP = -0.15
 
 # Relative risk threshold
-# If market_anomaly=True AND stock's excess_return > this → market-wide move, not idiosyncratic
-# Only stocks significantly underperforming the market warrant CRITICAL in a bear market
-EXCESS_RETURN_CRITICAL = -0.02  # stock must underperform market by >2% to keep CRITICAL
+# Stock must meaningfully underperform the market to keep CRITICAL in a broad selloff.
+EXCESS_RETURN_CRITICAL = -0.05  # stock must underperform market by >5% to keep CRITICAL
 
 # Direction confidence thresholds (from XGBoost)
-P_DOWN_THRESHOLD    = 0.60      # minimum p_down to treat direction=down seriously
-P_HIGH_THRESHOLD    = 0.60      # minimum p_high to treat risk=high seriously
+P_DOWN_THRESHOLD    = 0.65      # minimum p_down to treat direction=down seriously
+P_HIGH_THRESHOLD    = 0.65      # minimum p_high to treat risk=high seriously
 
 # Positive momentum thresholds
 P_DOWN_LOW          = 0.30      # p_down must be low for POSITIVE_MOMENTUM
@@ -52,7 +54,7 @@ RSI_OVERBOUGHT      = 70
 RSI_OVERSOLD        = 30
 
 # ES ratio threshold for tail risk
-ES_RATIO_HIGH       = 1.5
+ES_RATIO_HIGH       = 2.0       # raised from 1.5 — tail risk fires only on genuine extremes
 
 
 # ── Data Classes ───────────
@@ -90,6 +92,9 @@ class AnomalyInput:
 
     # Rolling max drawdown — from Layer 3 feature (max_drawdown_30d)
     drawdown:       float         # negative float, e.g. -0.04 = -4% (worst peak-to-trough, 30d)
+
+    # Daily volatility (std of returns) — used for dynamic drawdown thresholds
+    volatility:     float         # e.g. 0.02 = 2% daily vol
 
     # Relative performance vs market (stock_return - market_return)
     excess_return:  float         # negative = underperforming market, positive = outperforming
@@ -231,15 +236,24 @@ def decide(inp: AnomalyInput) -> DecisionOutput:
     caution      = None
     override     = None
 
+    # Dynamic drawdown thresholds — scale with stock's own volatility.
+    # For calm stocks (vol=0.01): warning=-1%, critical=-2% → tighter, unusual moves matter more.
+    # For volatile stocks (vol=0.05): warning=-5%, critical=-10% → wider, normal swings ignored.
+    # Caps prevent thresholds from becoming too loose on extreme movers (TSLA, NVDA).
+    # Uses 30-day vol approximation (daily vol * sqrt(21)) for comparison to 30D drawdown.
+    vol_30d          = inp.volatility * (21 ** 0.5)
+    drawdown_warning  = max(DRAWDOWN_WARNING_CAP,  -1.0 * vol_30d)
+    drawdown_critical = max(DRAWDOWN_CRITICAL_CAP, -2.0 * vol_30d)
+
     # ── 1. Hard Override: Drawdown ────────────────────────────────────────────
-    if inp.drawdown <= DRAWDOWN_CRITICAL:
+    if inp.drawdown <= drawdown_critical:
         # Relative risk check: if stock is NOT significantly underperforming the market,
         # the drawdown is market-driven — downgrade to WARNING (not idiosyncratic)
         # Rule: market falls → WARNING; stock falls harder than market → CRITICAL
         if inp.excess_return > EXCESS_RETURN_CRITICAL:
             override = (
-                f"Drawdown {inp.drawdown:.1%} but in line with market "
-                f"(excess_return={inp.excess_return:+.1%})"
+                f"Drawdown {inp.drawdown:.1%} (threshold {drawdown_critical:.1%}) "
+                f"but in line with market (excess_return={inp.excess_return:+.1%})"
             )
             return DecisionOutput(
                 ticker=inp.ticker, date=inp.date,
@@ -251,8 +265,8 @@ def decide(inp: AnomalyInput) -> DecisionOutput:
             )
         # Stock significantly underperforms market → CRITICAL (idiosyncratic risk)
         override = (
-            f"Drawdown {inp.drawdown:.1%} AND underperforming market "
-            f"by {inp.excess_return:+.1%}"
+            f"Drawdown {inp.drawdown:.1%} (threshold {drawdown_critical:.1%}) "
+            f"AND underperforming market by {inp.excess_return:+.1%}"
         )
         return DecisionOutput(
             ticker=inp.ticker, date=inp.date,
@@ -263,8 +277,8 @@ def decide(inp: AnomalyInput) -> DecisionOutput:
             summary=_summary("CRITICAL", context, None, override, confidence)
         )
 
-    if inp.drawdown <= DRAWDOWN_WARNING and inp.risk_level == "high":
-        override = f"Drawdown {inp.drawdown:.1%} with high risk"
+    if inp.drawdown <= drawdown_warning and inp.risk_level == "high":
+        override = f"Drawdown {inp.drawdown:.1%} (threshold {drawdown_warning:.1%}) with high risk"
         return DecisionOutput(
             ticker=inp.ticker, date=inp.date,
             severity="WARNING", action="MONITOR",
@@ -446,13 +460,14 @@ def run_decision_engine(records: list[dict]) -> list[DecisionOutput]:
 # ── Example Usage ───────────────────────────────
 if __name__ == "__main__":
     examples = [
-        {   # Expected: CRITICAL — drawdown override
+        {   # Expected: CRITICAL — drawdown override (-16% AND underperforms by 6%)
             "ticker": "AAPL", "date": "2024-05-02",
             "risk_level": "high", "p_high": 0.88,
             "direction": "down", "p_down": 0.79, "p_up": 0.05,
             "anomaly_score": 4, "market_anomaly": False, "sector_anomaly": False,
-            "es_ratio": 1.9, "rsi": 35.0,
-            "momentum_5": -0.03, "momentum_10": -0.01, "drawdown": -0.06,
+            "es_ratio": 2.2, "rsi": 35.0,
+            "momentum_5": -0.03, "momentum_10": -0.01, "drawdown": -0.16,
+            "excess_return": -0.06,
         },
         {   # Expected: CRITICAL — risk=high + direction=down confirmed
             "ticker": "MSFT", "date": "2024-05-02",

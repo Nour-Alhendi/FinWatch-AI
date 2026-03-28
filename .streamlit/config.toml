@@ -1,0 +1,17 @@
+[theme]
+base = "dark"
+
+textColor                = "#e2e8f0"
+primaryColor             = "#1de9b6"
+backgroundColor          = "#060a0f"
+secondaryBackgroundColor = "#0b111a"
+
+showWidgetBorder = true
+borderColor      = "#1e2d41"
+
+font           = "'Inter':https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+baseFontWeight = 400
+baseFontSize   = 14
+
+[server]
+headless = true

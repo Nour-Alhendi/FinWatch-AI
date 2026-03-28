@@ -30,7 +30,7 @@ DETECTION_FIELDS = [
     "es_ratio",
     "rsi", "momentum_5", "momentum_10",
     "max_drawdown_30d", "obv_signal",
-    "excess_return",
+    "excess_return", "volatility",
 ]
 
 
@@ -116,6 +116,7 @@ def run(cutoff_date=None):
             "drawdown":       float(row["max_drawdown_30d"]) if pd.notna(row["max_drawdown_30d"]) else 0.0,
             "excess_return":  float(row["excess_return"])    if pd.notna(row["excess_return"])    else 0.0,
             "obv_signal":     float(row["obv_signal"])       if pd.notna(row["obv_signal"])       else 0.0,
+            "volatility":     float(row["volatility"])       if pd.notna(row["volatility"])       else 0.02,
         })
 
     # ── 6. Run Decision Engine
