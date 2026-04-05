@@ -129,16 +129,6 @@ SHAP tells you *which features* drove the model decision. The LLM (Groq / llama-
 
 ---
 
-## Stress Testing
-
-11 data corruption scenarios injected at controlled rates to validate the quality pipeline:
-
-Missing values, price spikes, zero values, duplicate rows, wrong dates, stale prices, OHLC violations, zero volume, extreme overnight gaps, negative volume, timestamp conflicts.
-
-All scenarios are caught before corrupt data reaches the feature engineering layer.
-
----
-
 ## Dashboard
 
 Interactive Streamlit dashboard (dark theme) with:
@@ -202,7 +192,6 @@ ai-monitoring-system/
 │   ├── explainability/              # SHAP, VADER, Groq narrator
 │   ├── reporting/                   # Audit log, daily report
 │   ├── backtesting/                 # Walk-forward backtesting
-│   ├── stress_testing/              # 11 corruption scenarios
 │   └── pipeline.py                  # Main entry point
 ├── finwatch/app.py                  # Streamlit dashboard
 ├── models/                          # Trained model files (.pkl, .keras)

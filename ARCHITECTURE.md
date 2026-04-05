@@ -200,8 +200,6 @@ All collectors write to `data/fundamental/` with a 1-day lag by design (data is 
 
 **Data source:** yfinance (fundamentals), Finnhub (headlines)
 
-> Note: `xgboost_direction.pkl` (3-class directional model) was trained and evaluated but is **not used in production** — accuracy ~40% on a 3-class task (33% random baseline). Kept for reference.
-
 ---
 
 ## Layer 6 — Decision Engine
@@ -355,28 +353,6 @@ Walk-forward setup — no lookahead bias:
 
 ---
 
-## Stress Testing (`src/stress_testing/`)
-
-11 data corruption scenarios injected at controlled rates to validate the quality pipeline catches them:
-
-| Scenario | Injection Rate |
-|----------|--------------|
-| Missing values (NaN / -999) | 2% |
-| Price spikes (×10, ×0.01, +1000) | 1% |
-| Zero values (clustered blocks) | 1% |
-| Duplicate rows | 1% |
-| Wrong dates (±30d, ±365d, weekends) | 0.5% |
-| Stale prices (frozen feed, 3–5 rows) | 1% |
-| OHLC violations (High < Low, etc.) | 0.5% |
-| Zero volume | 1% |
-| Extreme overnight gaps (−80–90%) | 0.3% |
-| Negative volume | 0.5% |
-| Timestamp conflicts (same date, different Close) | 0.5% |
-
-All scenarios are detected and flagged before corrupt data reaches feature engineering.
-
----
-
 ## Data Flow
 
 ```
@@ -403,5 +379,3 @@ data/reports/daily_summary.txt         ← Layer 8B: daily_report.py
 | Meta-Model | `models/meta_model.pkl` | Backtest fold outputs | Layer 5C |
 | Isolation Forest × 14 | `models/if_{sector}.pkl` | Per-sector history | Layer 4 |
 | LSTM Autoencoder × 30 | `models/ae_{sector}_{bucket}.keras` | Per-sector × volatility | Layer 4 |
-| XGBoost Risk | `models/xgboost_risk.pkl` | Pre-2024 data | Legacy / reference |
-| XGBoost Direction | `models/xgboost_direction.pkl` | Pre-2024 data | Not used in production (~40% accuracy) |
