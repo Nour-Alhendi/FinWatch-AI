@@ -41,11 +41,11 @@ Raw OHLCV
 ## Layer 1 — Data Ingestion
 
 - **Source:** Stooq API (free, no rate limits for historical pulls)
-- **Universe:** 55 stocks across 9 sectors + 10 sector ETFs + S&P 500 reference (`^SPX`)
+- **Universe:** 56 stocks across 11 sectors + 9 sector ETFs + S&P 500 reference (`^SPX`)
 - **History:** 10 years daily OHLCV
 - **Format:** One Parquet file per ticker in `data/raw/`
 
-**Sectors covered:** Technology, AI & Robotics, Financials, Healthcare, Consumer Staples, Energy, Consumer Discretionary, Industrials, Green Energy, Crypto
+**Sectors covered:** Technology, AI & Robotics, Financials, Healthcare, Consumer Staples, Energy, Consumer Discretionary, Industrials, Green Energy, Crypto & Mining, Semiconductors
 
 **ETF reference set:** XLK, XLF, XLV, XLP, XLE, XLY, XLI, BOTZ, ICLN, ^SPX  
 Used as sector-level baselines for excess return and regime detection.
@@ -104,11 +104,26 @@ Five validation checks run before any feature is computed:
 | Feature | Description |
 |---------|-------------|
 | `return_lag_1/2/3` | Lagged returns for autocorrelation signal |
-| `momentum_5`, `momentum_10` | 5- and 10-day price momentum |
+| `momentum_5`, `momentum_10` | 5- and 10-day price momentum (percentage-based: `Close/Close.shift(n) − 1`) |
 | `vol_5`, `vol_20`, `vol_change` | Short vs. medium volatility |
 | `trend_strength` | ADX-style trend magnitude |
 | `volume_trend` | Volume acceleration vs. baseline |
 | `volatility_ratio` | Stock volatility / SPX volatility |
+
+### 3D · Explanation Features (`src/features/advanced/explanation_features.py`)
+
+Pre-computed price context for the LLM Narrator — Layer 7C reads these values directly and never computes them:
+
+| Feature | Description |
+|---------|-------------|
+| `current_price` | Latest closing price |
+| `ema_20` | 20-day EMA of Close |
+| `ema_diff_pct` | `(current_price / ema_20 − 1) × 100` — position vs. recent average |
+| `price_3m_high` | 90-day rolling high |
+| `price_3m_low` | 90-day rolling low |
+| `price_vs_avg` | Label: "above" / "near" / "below" (±2% of EMA) |
+
+**Output:** `data/explanations/explanation_features.parquet`
 
 ---
 
@@ -127,8 +142,8 @@ Using four complementary detectors and combining them into a weighted score prod
 
 | Model | File | Instances | Weight | What it detects |
 |-------|------|-----------|--------|----------------|
-| LSTM Autoencoder | `src/detection/lstm_autoencoder.py` | 30 (sector × volatility bucket) | 0.30 | Sequence anomalies — reconstruction error on 20-day windows |
-| Isolation Forest | `src/detection/isolation_forest.py` | 14 (one per sector) | 0.30 | Multivariate outliers in feature space |
+| LSTM Autoencoder | `src/detection/lstm_autoencoder.py` | 16 (sector × volatility bucket) | 0.30 | Sequence anomalies — reconstruction error on 20-day windows |
+| Isolation Forest | `src/detection/isolation_forest.py` | 16 (one per sector group) | 0.30 | Multivariate outliers in feature space |
 | Return Z-Score | `src/detection/statistical.py` | — | 0.20 | Distribution outliers (±3σ, 20d and 60d window) |
 | Sector Z-Score | `src/detection/statistical.py` | — | 0.20 | Stock return vs. sector peer distribution |
 
@@ -292,12 +307,15 @@ FinBERT requires GPU for reasonable throughput and its pre-training corpus (fina
 
 ### 7C · LLM Narrator (`src/explainability/llm_narrator.py`)
 
-- **Input:** Decision output + top-3 SHAP drivers + sentiment scores
+- **Input:** Explanation features (Layer 3D) + decision output + top-3 SHAP drivers + sentiment
 - **Output:** Plain-English per-ticker narrative (grounded, hallucination-resistant)
 - **Model:** `llama-3.3-70b-versatile` via Groq API
-- **Caching:** JSON cache keyed by `YYYY-MM-DD_TICKER` — prevents re-generation within the same trading day and avoids quota exhaustion on re-runs
+- **Caching:** JSON cache keyed by `YYYY-MM-DD_TICKER` — prevents re-generation within the same trading day
+- **Architecture:** Read-only layer — performs no calculations. All numeric values (price, EMA, 3M range) are pre-computed in Layer 3D and passed directly into the prompt.
 
-**Hallucination control:** The LLM is prompted with structured facts only (severity, signal, SHAP features, sentiment score, context string). It synthesizes language — it does not generate new financial claims.
+**Hallucination control:** The LLM receives only structured facts (price, signal, SHAP features, sentiment). It synthesizes language only — it cannot invent new financial claims.
+
+**Languages:** English, German, Arabic — selected at runtime via `--language` flag.
 
 ### 7D · Explainability Pipeline (`src/explainability/explainability_pipeline.py`)
 
@@ -378,5 +396,5 @@ data/reports/daily_summary.txt         ← Layer 8B: daily_report.py
 | XGBoost Drawdown | `models/xgboost_drawdown.pkl` | Pre-2024 data | Layer 5B + Layer 7A (SHAP) |
 | LightGBM Drawdown | `models/lgbm_drawdown.pkl` | Pre-2024 data | Layer 5B (comparison — best wins) |
 | Meta-Model | `models/meta_model.pkl` | Backtest fold outputs | Layer 5C |
-| Isolation Forest × 14 | `models/if_{sector}.pkl` | Per-sector history | Layer 4 |
-| LSTM Autoencoder × 30 | `models/ae_{sector}_{bucket}.keras` | Per-sector × volatility | Layer 4 |
+| Isolation Forest × 16 | `models/if_{sector}.pkl` | Per-sector group history | Layer 4 |
+| LSTM Autoencoder × 16 | `models/ae_{sector}_{bucket}.keras` | Per-sector × volatility bucket | Layer 4 |

@@ -2,7 +2,7 @@
 
 **AI-powered Financial Risk Assessment & Decision Support System**
 
-> Monitors 55 stocks and 10 sector ETFs daily — detects anomalies, classifies risk severity, and produces an explainable trading signal for every asset.
+> Monitors 56 stocks across 11 sectors and 9 sector ETFs daily — detects anomalies, classifies risk severity, and produces an explainable trading signal for every asset.
 
 ---
 
@@ -47,9 +47,9 @@ The system runs an **8-layer modular pipeline**:
 
 | Layer | Name | What it does |
 |-------|------|-------------|
-| 1 | Data Ingestion | Downloads 10 years of daily OHLCV for 65 assets |
+| 1 | Data Ingestion | Downloads 10 years of daily OHLCV for 66 assets |
 | 2 | Data Quality | Validates schema, detects OHLC violations, gaps, stale prices |
-| 3 | Feature Engineering | 30+ features: returns, RSI, momentum, regime, ETF context, sector comparison |
+| 3 | Feature Engineering | 30+ features: returns, RSI, momentum, regime, ETF context, price context for LLM |
 | 4 | Anomaly Detection | 4-model ensemble → weighted continuous score (0–1) |
 | 5 | Prediction + Fundamentals | Drawdown probability + meta-model stacking + valuation signals |
 | 6 | Decision Engine | Severity classification + trading signal, regime- and momentum-aware |
@@ -60,8 +60,8 @@ The system runs an **8-layer modular pipeline**:
 
 | Model | Count | Weight | What it detects |
 |-------|-------|--------|----------------|
-| LSTM Autoencoder | 30 (sector × volatility bucket) | 0.30 | Temporal sequence anomalies |
-| Isolation Forest | 14 (per sector) | 0.30 | Multivariate outliers |
+| LSTM Autoencoder | 16 (sector × volatility bucket) | 0.30 | Temporal sequence anomalies |
+| Isolation Forest | 16 (per sector group) | 0.30 | Multivariate outliers |
 | Return Z-Score | — | 0.20 | Distribution outliers (±3σ, 20d + 60d window) |
 | Sector Z-Score | — | 0.20 | Stock vs. sector peer deviation |
 
@@ -177,7 +177,7 @@ streamlit run app.py
 | Finnhub | News headlines — last 7 days per ticker |
 | yfinance | Fundamentals — P/E, P/B, revenue growth, insider activity, options flow |
 
-**Universe:** 55 stocks across 9 sectors + 10 sector ETFs + S&P 500 reference index.
+**Universe:** 56 stocks across 11 sectors + 9 sector ETFs + S&P 500 reference index.
 
 ---
 
