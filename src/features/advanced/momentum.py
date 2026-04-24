@@ -8,8 +8,8 @@ INPUT_DIR = Path("data/features")
 OUTPUT_DIR = Path("data/features")
 
 def calculate_momentum(df):
-    df["momentum_5"] = df["Close"] - df["Close"].shift(5)
-    df["momentum_10"] = df["Close"] - df["Close"].shift(10)
+    df["momentum_5"]  = (df["Close"] / df["Close"].shift(5)  - 1).fillna(0)
+    df["momentum_10"] = (df["Close"] / df["Close"].shift(10) - 1).fillna(0)
     return df
 
 def run_momentum():

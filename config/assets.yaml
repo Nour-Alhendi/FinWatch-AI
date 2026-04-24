@@ -9,8 +9,8 @@ sector_etfs:
   Consumer Discretionary: "XLY"
   Industrials: "XLI"
   Green Energy: "ICLN"
-  Semiconductors: "XLK"       # no dedicated semiconductor ETF downloaded — proxy: Technology
-  Crypto & Mining: "XLK"      # no crypto ETF downloaded — proxy: Technology
+  Semiconductors: "XLK"       # no dedicated semiconductor ETF — proxy: Technology
+  Crypto & Mining: "XLK"      # no crypto ETF — proxy: Technology
 
 references:
   - ticker: "^SPX"
@@ -52,6 +52,9 @@ assets:
   - ticker: "AMD"
     name: "Advanced Micro Devices"
     sector: "Technology"
+  - ticker: "INTC"
+    name: "Intel"
+    sector: "Technology"
   - ticker: "GOOG"
     name: "Alphabet (Google)"
     sector: "Technology"
@@ -72,6 +75,18 @@ assets:
   - ticker: "AI"
     name: "C3.ai"
     sector: "AI & Robotics"
+  - ticker: "NBIS"
+    name: "Nebius Group"
+    sector: "AI & Robotics"
+  - ticker: "PANW"
+    name: "Palo Alto Networks"
+    sector: "AI & Robotics"
+  - ticker: "CRWD"
+    name: "CrowdStrike"
+    sector: "AI & Robotics"
+  - ticker: "NET"
+    name: "Cloudflare"
+    sector: "AI & Robotics"
 
   # Consumer Discretionary
   - ticker: "TSLA"
@@ -86,9 +101,6 @@ assets:
   - ticker: "MCD"
     name: "McDonald's"
     sector: "Consumer Discretionary"
-  - ticker: "SBUX"
-    name: "Starbucks"
-    sector: "Consumer Discretionary"
 
   # Financials
   - ticker: "JPM"
@@ -100,11 +112,14 @@ assets:
   - ticker: "GS"
     name: "Goldman Sachs"
     sector: "Financials"
-  - ticker: "MS"
-    name: "Morgan Stanley"
-    sector: "Financials"
   - ticker: "BLK"
     name: "BlackRock"
+    sector: "Financials"
+  - ticker: "V"
+    name: "Visa"
+    sector: "Financials"
+  - ticker: "MA"
+    name: "Mastercard"
     sector: "Financials"
 
   # Healthcare
@@ -120,8 +135,11 @@ assets:
   - ticker: "ABBV"
     name: "AbbVie"
     sector: "Healthcare"
-  - ticker: "MRK"
-    name: "Merck"
+  - ticker: "LLY"
+    name: "Eli Lilly"
+    sector: "Healthcare"
+  - ticker: "AMGN"
+    name: "Amgen"
     sector: "Healthcare"
 
   # Consumer Staples
@@ -137,9 +155,6 @@ assets:
   - ticker: "WMT"
     name: "Walmart"
     sector: "Consumer Staples"
-  - ticker: "CL"
-    name: "Colgate-Palmolive"
-    sector: "Consumer Staples"
 
   # Energy
   - ticker: "XOM"
@@ -150,9 +165,6 @@ assets:
     sector: "Energy"
   - ticker: "COP"
     name: "ConocoPhillips"
-    sector: "Energy"
-  - ticker: "SLB"
-    name: "Schlumberger"
     sector: "Energy"
   - ticker: "EOG"
     name: "EOG Resources"
@@ -174,6 +186,9 @@ assets:
   - ticker: "RTX"
     name: "Raytheon Technologies"
     sector: "Industrials"
+  - ticker: "KRKNF"
+    name: "Kraken Robotics"
+    sector: "Industrials"
 
   # Green Energy
   - ticker: "BE"
@@ -182,9 +197,6 @@ assets:
   - ticker: "ENPH"
     name: "Enphase Energy"
     sector: "Green Energy"
-  - ticker: "PLUG"
-    name: "Plug Power"
-    sector: "Green Energy"
   - ticker: "NEE"
     name: "NextEra Energy"
     sector: "Green Energy"
@@ -192,34 +204,7 @@ assets:
     name: "First Solar"
     sector: "Green Energy"
 
-  # Technology (additions)
-  - ticker: "INTC"
-    name: "Intel"
-    sector: "Technology"
-  - ticker: "QNC"
-    name: "Quantum eMotion"
-    sector: "Technology"
-
-  # AI & Software (additions)
-  - ticker: "NBIS"
-    name: "Nebius Group"
-    sector: "AI & Robotics"
-  - ticker: "RZLV"
-    name: "Rezolve AI"
-    sector: "AI & Robotics"
-  - ticker: "RCAT"
-    name: "Red Cat Holdings"
-    sector: "Industrials"
-
-  # Industrials (additions)
-  - ticker: "KRKNF"
-    name: "Kraken Robotics"
-    sector: "Industrials"
-
-  # Crypto & Mining (new sector)
-  - ticker: "BITF"
-    name: "Bitfarms"
-    sector: "Crypto & Mining"
+  # Crypto & Mining
   - ticker: "IREN"
     name: "IREN Energy"
     sector: "Crypto & Mining"
@@ -233,7 +218,7 @@ assets:
     name: "Coinbase"
     sector: "Crypto & Mining"
 
-  # Semiconductors (new sector)
+  # Semiconductors
   - ticker: "AVGO"
     name: "Broadcom"
     sector: "Semiconductors"
@@ -243,30 +228,3 @@ assets:
   - ticker: "MU"
     name: "Micron"
     sector: "Semiconductors"
-
-  # Cybersecurity (extend AI & Software)
-  - ticker: "PANW"
-    name: "Palo Alto Networks"
-    sector: "AI & Robotics"
-  - ticker: "CRWD"
-    name: "CrowdStrike"
-    sector: "AI & Robotics"
-  - ticker: "NET"
-    name: "Cloudflare"
-    sector: "AI & Robotics"
-
-  # Financials (additions)
-  - ticker: "V"
-    name: "Visa"
-    sector: "Financials"
-  - ticker: "MA"
-    name: "Mastercard"
-    sector: "Financials"
-
-  # Healthcare (additions)
-  - ticker: "LLY"
-    name: "Eli Lilly"
-    sector: "Healthcare"
-  - ticker: "AMGN"
-    name: "Amgen"
-    sector: "Healthcare"

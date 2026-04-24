@@ -80,7 +80,11 @@ def run():
         print(f"Updated: {f.name}")
 
         # --- 2) Snapshot (latest row) for Layer 6 ---
-        last = df.dropna(subset=["es_95"]).iloc[-1]
+        valid = df.dropna(subset=["es_95"])
+        if valid.empty:
+            print(f"Skipped snapshot for {f.stem}: no valid es_95 rows")
+            continue
+        last = valid.iloc[-1]
         snapshots.append({
             "ticker":   f.stem,
             "var_95":   last["var_95"],

@@ -21,10 +21,37 @@ from prediction.models.drawdown_probability import load_data, FEATURES
 import explainability.xai as xai
 import explainability.narrative_engine as narrative_engine
 
-DECISION_IN = ROOT / "data/decisions/decisions.parquet"
-DETECTION_DIR = ROOT / "data/detection"
-OUT_DIR     = ROOT / "data/explanations"
+DECISION_IN        = ROOT / "data/decisions/decisions.parquet"
+DETECTION_DIR      = ROOT / "data/detection"
+EXPL_FEATURES_PATH = ROOT / "data/explanations/explanation_features.parquet"
+OUT_DIR            = ROOT / "data/explanations"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _load_explanation_features() -> dict:
+    """Load pre-computed explanation features (EMA20, 3M range, price_vs_avg)."""
+    if not EXPL_FEATURES_PATH.exists():
+        return {}
+    df = pd.read_parquet(EXPL_FEATURES_PATH)
+    return df.set_index("ticker").to_dict(orient="index")
+
+
+def _monthly_summary(ticker: str) -> str:
+    """Build last-4-months price summary string for a ticker."""
+    f = DETECTION_DIR / f"{ticker}.parquet"
+    if not f.exists():
+        return "N/A"
+    df = pd.read_parquet(f)
+    df["Date"] = pd.to_datetime(df["Date"])
+    tail = df.sort_values("Date").tail(120)
+    monthly = []
+    for label, grp in tail.groupby(tail["Date"].dt.to_period("M")):
+        monthly.append(
+            f"{label}: high={grp['Close'].max():.2f} "
+            f"low={grp['Close'].min():.2f} "
+            f"close={grp['Close'].iloc[-1]:.2f}"
+        )
+    return " | ".join(monthly[-4:])
 
 
 def _load_obv() -> dict[str, float]:
@@ -48,17 +75,21 @@ def run() -> pd.DataFrame:
     print("=" * 55)
 
     # ── 7A: SHAP ──────────────────────────────────────────────
-    print("\n[1/4] Loading data + computing SHAP values...")
+    print("\n[1/5] Loading data + computing SHAP values...")
     data = load_data()
     latest, shap_matrix = xai.compute(data, FEATURES)
     tickers = latest["ticker"].tolist()
     print(f"      SHAP shape: {shap_matrix.shape}")
 
+    # ── Explanation Features (EMA20, 3M range, price_vs_avg) ─
+    print("[2/5] Loading explanation features...")
+    expl_features = _load_explanation_features()
+
     # ── OBV + Decisions ───────────────────────────────────────
-    print("[2/4] Loading OBV signals...")
+    print("[3/5] Loading OBV signals...")
     obv_map = _load_obv()
 
-    print("[3/4] Loading Decision Engine output...")
+    print("[4/5] Loading Decision Engine output...")
     if not DECISION_IN.exists():
         raise FileNotFoundError(
             f"decisions.parquet not found at {DECISION_IN}\n"
@@ -69,7 +100,7 @@ def run() -> pd.DataFrame:
     ]
 
     # ── 7B: Narrative Engine ──────────────────────────────────
-    print("[4/4] Building narratives...")
+    print("[5/5] Building narratives...")
     rows = []
     for i, ticker in enumerate(tickers):
         dec_row = decisions[decisions["ticker"] == ticker]
@@ -89,6 +120,8 @@ def run() -> pd.DataFrame:
             dec["severity"], obv, driver_shap
         )
 
+        ef = expl_features.get(ticker, {})
+
         row = {
             "ticker":           ticker,
             "date":             dec["date"],
@@ -104,6 +137,14 @@ def run() -> pd.DataFrame:
             "narrative":        narrative_key,
             "narrative_text":   narrative_text,
             "decision_context": dec["context"],
+            # Explanation features (pre-computed in Layer 3)
+            "ema_20":           ef.get("ema_20"),
+            "ema_diff_pct":     ef.get("ema_diff_pct"),
+            "price_3m_high":    ef.get("price_3m_high"),
+            "price_3m_low":     ef.get("price_3m_low"),
+            "price_vs_avg":     ef.get("price_vs_avg", "near"),
+            # Monthly summary (built here in Layer 7A)
+            "monthly_summary":  _monthly_summary(ticker),
         }
 
         rows.append(row)

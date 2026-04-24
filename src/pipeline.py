@@ -57,20 +57,20 @@ if __name__ == "__main__":
         out = save_valuation(valuation_df)
         print(f"Valuation saved → {out}")
 
-    # ── Step 5: Prediction + Decision + Explainability
-    run_prediction_pipeline()
-    decisions_df = run_decision()
-    run_explainability()
-    log_anomalies(decisions_df)
-    run_daily_report()
-
-    # ── Step 6: Collect news sentiment history (for future training)
+    # ── Step 5: Collect news sentiment (needed by LLM narrator)
     print("\n" + "=" * 55)
-    print("STEP 6 — Collect news sentiment history")
+    print("STEP 5 — Collect news sentiment history")
     print("=" * 55)
     sentiment_df = collect_sentiment()
     if not sentiment_df.empty:
         out = save_sentiment(sentiment_df)
         print(f"Sentiment saved → {out}")
+
+    # ── Step 6: Prediction + Decision + Explainability
+    run_prediction_pipeline()
+    decisions_df = run_decision()
+    run_explainability()
+    log_anomalies(decisions_df)
+    run_daily_report()
 
 

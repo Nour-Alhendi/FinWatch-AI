@@ -8,6 +8,7 @@ from vol_change import run_vol_change
 from trend_strength import run_trend_strength
 from volatility_ratio import run_volatility_ratio
 from volume_trend import run_volume_trend
+from explanation_features import run as run_explanation_features
 
 def run_advanced_features():
     print("--- Advanced Features ---")
@@ -29,6 +30,9 @@ def run_advanced_features():
 
     print("6) Volume Trend")
     run_volume_trend()
+
+    print("7) Explanation Features (EMA20, 3M range, price_vs_avg)")
+    run_explanation_features()
 
 
 if __name__ == "__main__":

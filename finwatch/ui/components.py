@@ -205,7 +205,7 @@ def show_analysis_modal(ticker: str, name: str, det_df, news_df, lang: str) -> N
     rtl      = "direction:rtl;text-align:right;" if lang == "arabic" else ""
     safe_txt = _md_to_html(display_text)
     st.markdown(
-        f'<div style="font-size:12px;color:#b8c4ce;line-height:1.9;'
+        f'<div style="font-size:14px;color:#b8c4ce;line-height:1.9;'
         f'font-family:\'IBM Plex Sans\',sans-serif;{rtl}">'
         f'{safe_txt}</div>',
         unsafe_allow_html=True,
@@ -469,12 +469,8 @@ def render_risk_news_row(ticker: str, row, det_df, decisions, news_df) -> None:
           <div class="rp-title">AI Risk Analysis</div>
           <div class="sev-big {sev_cls}">{sev.replace('_',' ')}</div>
           <div style="font-size:9px;color:#5c7080;margin-bottom:4px;font-family:IBM Plex Mono">{row.get('action','—')} · {row.get('date','—')}</div>
-          {signal_html}
           {anom_row_html}
           {dd_prob_html}
-          <div class="rp-row"><span class="rp-key">Momentum</span>
-            <span class="rp-val {mom_cls}">{mom_arr} {mom}</span></div>
-          <div class="rp-row"><span class="rp-key">ES Ratio</span>{es_html}</div>
           <div class="rp-row"><span class="rp-key">Drawdown 30D</span>{dd_html}</div>
         </div>""", unsafe_allow_html=True)
 
@@ -631,9 +627,9 @@ def render_candle_panel(det_df, clicked_date: str) -> None:
         return (
             '<div style="display:flex;flex-direction:column;align-items:center;'
             'padding:0 12px;border-right:1px solid #1a2332">'
-            f'<span style="font-size:8px;color:#5c7080;font-family:IBM Plex Mono;'
+            f'<span style="font-size:10px;color:#5c7080;font-family:IBM Plex Mono;'
             f'letter-spacing:1px;margin-bottom:2px;cursor:help"{tip_attr}>{label}</span>'
-            f'<span style="font-size:11px;color:{color};font-family:IBM Plex Mono;'
+            f'<span style="font-size:12px;color:{color};font-family:IBM Plex Mono;'
             f'font-weight:500">{value}</span>'
             '</div>'
         )
@@ -752,8 +748,6 @@ def render_strategy_box(det_df, dec_row) -> None:
                            "#f85149" if rsi > 70 else "#1de9b6" if rsi < 30 else "#8b949e"))
     context_items.append((f"{_mom_tip}: {mom_sig}",
                            "#1de9b6" if mom_sig == "rising" else "#f85149" if mom_sig == "falling" else "#8b949e"))
-    context_items.append((f"{_dd_tip}: {p_drawdown*100:.0f}%",
-                           "#f85149" if p_drawdown >= 0.5 else "#e3b341" if p_drawdown >= 0.35 else "#1de9b6"))
     if n_anom > 0:
         context_items.append((f"{n_anom}/4 {_anom_tip} triggered", "#e3b341"))
     if pe_ratio is not None:
@@ -779,8 +773,8 @@ def render_strategy_box(det_df, dec_row) -> None:
 
     ctx_html = "".join(
         f'<div style="display:flex;align-items:center;gap:6px;padding:4px 0">'
-        f'<span style="color:{c};font-size:11px;flex-shrink:0">●</span>'
-        f'<span style="font-size:10px;color:#b8c4ce;line-height:1.4">{lbl}</span>'
+        f'<span style="color:{c};font-size:12px;flex-shrink:0">●</span>'
+        f'<span style="font-size:12px;color:#b8c4ce;line-height:1.4">{lbl}</span>'
         f'</div>'
         for lbl, c in context_items
     )

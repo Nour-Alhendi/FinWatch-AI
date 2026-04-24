@@ -71,8 +71,13 @@ def _fetch_metrics(ticker: str) -> dict:
         # Price-to-Book
         pb = m.get("pbAnnual") or m.get("pbQuarterly")
 
-        # Revenue growth YoY (TTM) — decimal, e.g. 0.12 = +12%
+        # Revenue growth YoY (TTM) — Finnhub returns as percent (e.g. 12.5 = +12.5%), convert to decimal
         rev_growth = m.get("revenueGrowthTTMYoy") or m.get("revenueGrowthAnnual")
+        if rev_growth is not None:
+            try:
+                rev_growth = float(rev_growth) / 100.0
+            except (TypeError, ValueError):
+                rev_growth = None
 
         def _safe(v):
             try:

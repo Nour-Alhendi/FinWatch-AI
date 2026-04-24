@@ -20,3 +20,6 @@ data/
 
 # Notebooks (local experimentation only)
 notebooks/
+
+# Pipeline logs
+pipeline_log.txt

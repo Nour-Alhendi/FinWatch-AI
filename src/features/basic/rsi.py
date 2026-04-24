@@ -10,11 +10,12 @@ OUTPUT_DIR = Path("data/features")
 WINDOW = 14
 
 def calculate_rsi(df):
-    delta = df["Close"].diff()          # tägliche Veränderung
-    gain = delta.clip(lower=0)          # nur positive Tage
-    loss = -delta.clip(upper=0)         # nur negative Tage (positiv gemacht)
-    avg_gain = gain.rolling(WINDOW).mean()
-    avg_loss = loss.rolling(WINDOW).mean()
+    delta = df["Close"].diff()
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
+    # Wilder's smoothing: alpha = 1/WINDOW (same as EWM with adjust=False)
+    avg_gain = gain.ewm(alpha=1/WINDOW, adjust=False).mean()
+    avg_loss = loss.ewm(alpha=1/WINDOW, adjust=False).mean()
     rs = avg_gain / avg_loss
     df["rsi"] = 100 - (100 / (1 + rs))
     return df
