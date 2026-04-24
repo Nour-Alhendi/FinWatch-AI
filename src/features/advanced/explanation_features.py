@@ -55,12 +55,13 @@ def run():
             price_vs_avg = "near"
 
         rows.append({
-            "ticker":        f.stem,
-            "ema_20":        round(ema_20, 4),
-            "ema_diff_pct":  round(ema_diff_pct, 2),
-            "price_3m_high": round(price_3m_high, 4),
-            "price_3m_low":  round(price_3m_low, 4),
-            "price_vs_avg":  price_vs_avg,
+            "ticker":         f.stem,
+            "current_price":  round(current_price, 4),
+            "ema_20":         round(ema_20, 4),
+            "ema_diff_pct":   round(ema_diff_pct, 2),
+            "price_3m_high":  round(price_3m_high, 4),
+            "price_3m_low":   round(price_3m_low, 4),
+            "price_vs_avg":   price_vs_avg,
         })
 
     result = pd.DataFrame(rows)

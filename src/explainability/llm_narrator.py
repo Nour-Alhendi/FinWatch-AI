@@ -67,12 +67,14 @@ def _build_prompt(row: dict, language: str) -> str:
     drawdown      = row.get("max_drawdown_30d", 0)
 
     # Explanation features — must be pre-computed in Layer 3
-    current_price   = row.get("current_price", row.get("Close", 0))
+    current_price   = row.get("current_price")
     ema_20          = row.get("ema_20")
     price_3m_high   = row.get("price_3m_high")
     price_3m_low    = row.get("price_3m_low")
     monthly_summary = row.get("monthly_summary", "N/A")
 
+    if current_price is None:
+        raise ValueError(f"[{row.get('ticker')}] Missing current_price — must be computed upstream in Layer 3")
     if ema_20 is None:
         raise ValueError(f"[{row.get('ticker')}] Missing ema_20 — must be computed upstream in Layer 3")
     if price_3m_high is None or price_3m_low is None:

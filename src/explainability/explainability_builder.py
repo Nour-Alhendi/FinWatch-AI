@@ -138,6 +138,7 @@ def run() -> pd.DataFrame:
             "narrative_text":   narrative_text,
             "decision_context": dec["context"],
             # Explanation features (pre-computed in Layer 3)
+            "current_price":    ef.get("current_price"),
             "ema_20":           ef.get("ema_20"),
             "ema_diff_pct":     ef.get("ema_diff_pct"),
             "price_3m_high":    ef.get("price_3m_high"),
