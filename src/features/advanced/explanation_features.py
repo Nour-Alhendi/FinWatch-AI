@@ -18,11 +18,11 @@ from pathlib import Path
 ROOT       = Path(__file__).resolve().parents[3]
 INPUT_DIR  = ROOT / "data/features"
 OUT_DIR    = ROOT / "data/explanations"
-OUT_DIR.mkdir(parents=True, exist_ok=True)
 OUT_PATH   = OUT_DIR / "explanation_features.parquet"
 
 
 def run():
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
     rows = []
 
     for f in sorted(INPUT_DIR.glob("*.parquet")):

@@ -15,28 +15,29 @@ from config.features import IF_FEATURES
 MODELS_DIR = Path(__file__).resolve().parents[2] / "models"
 MODELS_DIR.mkdir(exist_ok=True)
 
-INPUT_DIR      = Path("data/detection")
-OUTPUT_DIR     = Path("data/detection")
+ROOT           = Path(__file__).resolve().parents[2]
+INPUT_DIR      = ROOT / "data/detection"
+OUTPUT_DIR     = ROOT / "data/detection"
 TRAIN_DATA_END = pd.Timestamp("2026-03-01")  # training data cutoff
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 GROUPS = {
-    "Technology-Stable":   {"tickers": ["AAPL", "MSFT", "GOOG", "INTC"],      "calm_q": 0.75, "percentile": 3},
-    "Technology-Volatile": {"tickers": ["NVDA", "AMD"],                                "calm_q": 0.65, "percentile": 4},
-    "Semiconductors":      {"tickers": ["AVGO", "QCOM", "MU"],                        "calm_q": 0.70, "percentile": 3},
-    "AI-Stable":           {"tickers": ["CRM", "SNOW"],                               "calm_q": 0.70, "percentile": 3},
-    "AI-Volatile":         {"tickers": ["PLTR", "META"],                              "calm_q": 0.65, "percentile": 4},
-    "Cybersecurity":       {"tickers": ["PANW", "CRWD", "NET"],                       "calm_q": 0.65, "percentile": 4},
-    "Consumer-Stable":     {"tickers": ["NKE", "MCD"],                                  "calm_q": 0.75, "percentile": 3},
-    "Consumer-Volatile":   {"tickers": ["TSLA", "AMZN"],                              "calm_q": 0.70, "percentile": 3},
-    "Financials":          {"tickers": ["JPM", "BAC", "GS", "BLK", "V", "MA"],       "calm_q": 0.70, "percentile": 3},
-    "Healthcare":          {"tickers": ["JNJ", "PFE", "UNH", "ABBV", "LLY", "AMGN"], "calm_q": 0.75, "percentile": 3},
-    "Consumer Staples":    {"tickers": ["PG", "KO", "COST", "WMT"],                  "calm_q": 0.75, "percentile": 3},
-    "Energy":              {"tickers": ["XOM", "CVX", "COP", "EOG"],                  "calm_q": 0.75, "percentile": 3},
-    "Industrials":         {"tickers": ["CAT", "HON", "BA", "GE", "RTX"],             "calm_q": 0.70, "percentile": 3},
-    "Green Energy":        {"tickers": ["ENPH", "NEE", "FSLR"],                       "calm_q": 0.75, "percentile": 3},
-    "Crypto-Volatile":     {"tickers": ["IREN", "MARA", "RIOT", "COIN"],              "calm_q": 0.60, "percentile": 5},
-    "SmallCap-Volatile":   {"tickers": ["BE", "KRKNF", "NBIS", "AI"],                 "calm_q": 0.55, "percentile": 5},
+    "Technology-Stable":   {"tickers": ["AAPL", "MSFT", "GOOG", "INTC", "IBM", "DELL"], "calm_q": 0.75, "percentile": 3},
+    "Technology-Volatile": {"tickers": ["NVDA", "AMD", "NOK"],                           "calm_q": 0.65, "percentile": 4},
+    "Semiconductors":      {"tickers": ["AVGO", "QCOM", "MU", "MRVL", "ASML"],          "calm_q": 0.70, "percentile": 3},
+    "AI-Stable":           {"tickers": ["CRM", "SNOW"],                                  "calm_q": 0.70, "percentile": 3},
+    "AI-Volatile":         {"tickers": ["PLTR", "META"],                                 "calm_q": 0.65, "percentile": 4},
+    "Cybersecurity":       {"tickers": ["PANW", "CRWD", "NET"],                          "calm_q": 0.65, "percentile": 4},
+    "Consumer-Volatile":   {"tickers": ["TSLA", "AMZN"],                                 "calm_q": 0.70, "percentile": 3},
+    "Financials":          {"tickers": ["JPM", "BAC", "GS", "BLK", "V", "MA"],          "calm_q": 0.70, "percentile": 3},
+    "Healthcare":          {"tickers": ["JNJ", "PFE", "UNH", "ABBV", "LLY", "AMGN"],   "calm_q": 0.75, "percentile": 3},
+    "Consumer Staples":    {"tickers": ["PG", "KO", "COST", "WMT"],                     "calm_q": 0.75, "percentile": 3},
+    "Energy":              {"tickers": ["XOM", "CVX", "COP", "EOG"],                     "calm_q": 0.75, "percentile": 3},
+    "Industrials":         {"tickers": ["CAT", "HON", "BA", "GE", "RTX"],                "calm_q": 0.70, "percentile": 3},
+    "Green Energy":        {"tickers": ["ENPH", "NEE", "FSLR"],                          "calm_q": 0.75, "percentile": 3},
+    "Crypto-Volatile":     {"tickers": ["IREN", "MARA", "RIOT", "COIN", "APLD"],        "calm_q": 0.60, "percentile": 5},
+    "SmallCap-Volatile":   {"tickers": ["NBIS", "AI"],                                   "calm_q": 0.55, "percentile": 5},
+    "Quantum":             {"tickers": ["IONQ", "QBTS"],                                 "calm_q": 0.55, "percentile": 5},
 }
 
 

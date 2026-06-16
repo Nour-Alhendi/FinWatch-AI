@@ -79,8 +79,8 @@ def combine(file_path, threshold: Optional[float] = None):
         threshold = _load_best_threshold()
 
     df["combined_anomaly"] = df["anomaly_score_weighted"] >= threshold
-    df["market_anomaly"]   = df["is_market_wide"] & df["combined_anomaly"]
-    df["sector_anomaly"]   = df["is_sector_wide"] & df["combined_anomaly"]
+    df["market_anomaly"]   = df.get("is_market_wide",  False) & df["combined_anomaly"]
+    df["sector_anomaly"]   = df.get("is_sector_wide",  False) & df["combined_anomaly"]
 
     return df
 

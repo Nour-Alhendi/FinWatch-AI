@@ -2,7 +2,7 @@
 
 **AI-powered Financial Risk Assessment & Decision Support System**
 
-> Monitors 56 stocks across 11 sectors and 9 sector ETFs daily — detects anomalies, classifies risk severity, and produces an explainable trading signal for every asset.
+> Monitors 58 stocks across 12 sectors and 9 sector ETFs daily — detects anomalies, classifies risk severity, and produces an explainable trading signal for every asset.
 
 ---
 
@@ -30,7 +30,7 @@ The system produces a concrete, explainable recommendation (`ENTRY` / `HOLD` / `
 
 | Layer | Technology |
 |-------|-----------|
-| Data ingestion | Stooq API, yfinance, Finnhub |
+| Data ingestion | Twelve Data API (OHLCV), yfinance (fundamentals), Finnhub (news) |
 | Storage | Parquet (per-ticker), structured `data/` layout |
 | Feature engineering | pandas, numpy — 30+ features per ticker |
 | Anomaly detection | LSTM Autoencoder (Keras), Isolation Forest (scikit-learn), Z-Score |
@@ -47,7 +47,7 @@ The system runs an **8-layer modular pipeline**:
 
 | Layer | Name | What it does |
 |-------|------|-------------|
-| 1 | Data Ingestion | Downloads 10 years of daily OHLCV for 66 assets |
+| 1 | Data Ingestion | Downloads 10 years of daily OHLCV for all assets via Twelve Data API |
 | 2 | Data Quality | Validates schema, detects OHLC violations, gaps, stale prices |
 | 3 | Feature Engineering | 30+ features: returns, RSI, momentum, regime, ETF context, price context for LLM |
 | 4 | Anomaly Detection | 4-model ensemble → weighted continuous score (0–1) |
@@ -55,6 +55,8 @@ The system runs an **8-layer modular pipeline**:
 | 6 | Decision Engine | Severity classification + trading signal, regime- and momentum-aware |
 | 7 | Explainability + Sentiment | SHAP drivers + VADER + Groq LLM narrative |
 | 8 | Reporting + Dashboard | Streamlit dashboard + audit log + daily management summary |
+
+Layers 3, 4, 5, and 7 are **cached** (see Pipeline Caching below). Layer 6 (Decision) always runs fresh — trading signals must reflect the latest data.
 
 ### Anomaly Detection — Ensemble of 4 Models
 
@@ -139,9 +141,36 @@ Interactive Streamlit dashboard (dark theme) with:
 
 ---
 
-## How to Run
+## Setup
 
-**Train models (first time only):**
+### 1. Create virtual environment
+
+```bash
+python3.11 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+### 2. Configure API keys
+
+Copy `.env.example` to `.env` and fill in your keys:
+
+```bash
+cp .env.example .env
+```
+
+```env
+GROQ_API_KEY=your_groq_key_here
+FINNHUB_API_KEY=your_finnhub_key_here
+TWELVE_DATA_API_KEY=your_twelvedata_key_here
+```
+
+All three keys are required:
+- **Groq** — LLM narrative generation (free tier available at console.groq.com)
+- **Finnhub** — news headlines per ticker (free tier at finnhub.io)
+- **Twelve Data** — OHLCV price data (free Basic tier at twelvedata.com)
+
+### 3. Train models (first time only)
 
 ```bash
 python src/prediction/models/drawdown_probability.py   # XGBoost + LightGBM drawdown model
@@ -151,20 +180,19 @@ python src/prediction/models/meta_model.py             # Meta-model stacking lay
 python src/backtesting/backtest.py                     # Walk-forward backtest + signal precision
 ```
 
-> Models are **not retrained** on every pipeline run — only predictions are made.
+> Models are **not retrained** on every pipeline run — only predictions are made.  
 > Retrain recommendation: Drawdown model monthly, Isolation Forest every 3–6 months, LSTM Autoencoder every 6 months, Meta-model after each Drawdown retrain.
 
-**Daily pipeline:**
+### 4. Daily pipeline
 
 ```bash
 python src/pipeline.py
 ```
 
-**Dashboard:**
+### 5. Dashboard
 
 ```bash
-cd finwatch
-streamlit run app.py
+streamlit run finwatch/app.py
 ```
 
 ---
@@ -173,21 +201,92 @@ streamlit run app.py
 
 | Source | What it provides |
 |--------|-----------------|
-| Stooq | Daily OHLCV — 10 years historical |
+| Twelve Data API | Daily OHLCV — 10 years historical + incremental daily updates |
 | Finnhub | News headlines — last 7 days per ticker |
 | yfinance | Fundamentals — P/E, P/B, revenue growth, insider activity, options flow |
+| FRED (via pandas-datareader) | VIX index — used as macro regime signal |
 
-**Universe:** 56 stocks across 11 sectors + 9 sector ETFs + S&P 500 reference index.
+**Universe:** 58 stocks across 12 sectors + 9 sector ETFs + S&P 500 reference index (via SPY proxy — see note below).
+
+### Twelve Data — Rate Limits and Caching
+
+The free **Basic tier** provides:
+- 8 API credits per minute
+- 800 API credits per day
+
+The loader enforces **8 seconds between every API call** (including retries) to stay within the per-minute limit. On HTTP 429, it waits 65 seconds before retrying once.
+
+**Smart caching**: before each download, the loader checks whether the local parquet file already contains data through the last NYSE trading day (using `pandas_market_calendars`). If yes, the download is skipped entirely — no API credits consumed.
+
+**^SPX note**: the S&P 500 index (`SPX`) is not available on the Twelve Data free tier. The system automatically falls back to **SPY** (S&P 500 ETF) as a proxy. The data is saved as `data/raw/references/^SPX.parquet` so all downstream code works without modification.
+
+---
+
+## Pipeline Caching
+
+Layers 3, 4, 5, and 7 support hash-based caching to avoid recomputing unchanged layers.
+
+**Cache key** = sha256(input parquet fingerprints | source code hash | upstream layer hash)
+
+A layer is skipped if its cache key matches the stored key from the last run. Any change in input data, source code, or an upstream layer automatically invalidates the cache and all downstream layers.
+
+Cache entries are stored in `data/cache/` as JSON files (one per layer).
+
+### CLI flags
+
+```bash
+# Normal run — uses cache wherever valid
+python src/pipeline.py
+
+# Force full recompute — bypass all caches
+python src/pipeline.py --force
+
+# Recompute from layer N onward (N = 3, 4, 5, or 7)
+python src/pipeline.py --force-layer 5
+```
+
+Layer 6 (Decision) is **never cached** — trading signals must always be fresh.
+
+---
+
+## Dependencies
+
+Key pinned versions and reasons:
+
+| Package | Version | Why pinned |
+|---------|---------|-----------|
+| `numpy` | `==1.26.4` | Required by `tensorflow-macos==2.16.2`; numpy 2.x breaks TF |
+| `matplotlib` | `==3.8.3` | Requires numpy < 2 |
+| `pyarrow` | `==15.0.0` | Stable parquet read/write with pandas 2.2.1 |
+| `shap` | `==0.49.1` | Last version without `numpy>=2` requirement; includes XGBoost 3.x compatibility via runtime shim |
+| `pandas` | `==2.2.1` | Stable; pandas 3.x changed `groupby().apply()` behavior in breaking ways |
+| `tensorflow-macos` | `==2.16.2` | Apple Silicon TF; version must match `tensorflow-metal` |
+
+Full list in `requirements.txt`.
 
 ---
 
 ## Project Structure
 
 ```
-ai-monitoring-system/
+ai-Anomaly_detection-system/
+├── .env                             # API keys (never committed — see .env.example)
+├── .env.example                     # Key template
 ├── config/assets.yaml               # Tickers, sectors, ETF mappings
+├── requirements.txt
 ├── src/
-│   ├── ingestion/                   # Data download + fundamental collectors
+│   ├── pipeline.py                  # Main entry point (supports --force / --force-layer N)
+│   ├── cache/                       # Pipeline cache manager
+│   │   └── cache_manager.py
+│   ├── data/                        # Data adapters
+│   │   └── twelve_data_loader.py    # Twelve Data API adapter (replaces Stooq)
+│   ├── ingestion/                   # Download + fundamental collectors
+│   │   ├── download_historical.py
+│   │   ├── earnings_collector.py
+│   │   ├── insider_collector.py
+│   │   ├── options_collector.py
+│   │   ├── sentiment_collector.py
+│   │   └── valuation_collector.py
 │   ├── quality/                     # Data quality validation
 │   ├── features/                    # Feature engineering (basic / context / advanced)
 │   ├── detection/                   # Anomaly detection (LSTM-AE, IF, Z-Score)
@@ -195,9 +294,14 @@ ai-monitoring-system/
 │   ├── decision/                    # Severity + trading signal logic
 │   ├── explainability/              # SHAP, VADER, Groq narrator
 │   ├── reporting/                   # Audit log, daily report
-│   ├── backtesting/                 # Walk-forward backtesting
-│   └── pipeline.py                  # Main entry point
+│   └── backtesting/                 # Walk-forward backtesting
 ├── finwatch/app.py                  # Streamlit dashboard
+├── data/
+│   ├── raw/                         # Downloaded OHLCV parquets
+│   ├── features/                    # Engineered feature parquets
+│   ├── detection/                   # Anomaly score parquets
+│   ├── prediction/                  # Drawdown probability parquets
+│   └── cache/                       # Layer cache fingerprints (auto-generated)
 ├── models/                          # Trained model files (.pkl, .keras)
 └── ARCHITECTURE.md                  # Full technical architecture
 ```
@@ -212,7 +316,7 @@ This is a **monitoring and decision-support framework** for human analysts — n
 
 ## Planned
 
-- AI Agent with RAG — natural language Q&A over portfolio state ("Why is TSLA flagged? What do analysts say?")
+- AI Agent  — natural language Q&A over portfolio state ("Why is TSLA flagged? What do analysts say?")
 - Real-time / intraday data (1h candles)
 - Alert delivery via email or Slack
 - Expanded universe (international markets, crypto)

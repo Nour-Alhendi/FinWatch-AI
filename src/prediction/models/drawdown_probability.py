@@ -125,7 +125,8 @@ def generate_labels(data: pd.DataFrame) -> pd.DataFrame:
         df["drawdown_event"] = labels
         return df
 
-    data = pd.DataFrame(data.groupby("ticker", group_keys=False).apply(_label_ticker))
+    frames = [_label_ticker(grp) for _, grp in data.groupby("ticker", sort=False)]
+    data = pd.concat(frames, ignore_index=True) if frames else data
     return data.dropna(subset=["drawdown_event"])
 
 

@@ -4,9 +4,9 @@
 import pandas as pd
 from pathlib import Path
 
-INPUT_DIR  = Path("data/raw/raw_clean")
-OUTPUT_DIR = Path("data/features/")
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+ROOT       = Path(__file__).resolve().parents[3]
+INPUT_DIR  = ROOT / "data/raw/raw_clean"
+OUTPUT_DIR = ROOT / "data/features"
 
 
 # calculates daily % change in Close price
@@ -18,6 +18,7 @@ def returns(file_path):
 
 # loops over all files and saves results
 def run_returns():
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     for file in INPUT_DIR.glob("*.parquet"):
         df = returns(file)
         df.to_parquet(OUTPUT_DIR / file.name)

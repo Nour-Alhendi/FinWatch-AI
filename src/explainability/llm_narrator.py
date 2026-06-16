@@ -84,6 +84,17 @@ def _build_prompt(row: dict, language: str) -> str:
     if ema_diff_pct is None:
         raise ValueError(f"[{row.get('ticker')}] Missing ema_diff_pct — must be computed upstream in Layer 3")
 
+    # Anomaly typing (Layer 3 — compute_group_scores)
+    anomaly_type          = row.get("anomaly_type", "unknown")
+    volume_flow_score     = row.get("volume_flow_score", 0.0)
+    volatility_risk_score = row.get("volatility_risk_score", 0.0)
+    price_momentum_score  = row.get("price_momentum_score", 0.0)
+    market_context_score  = row.get("market_context_score", 0.0)
+
+    # Fundamental context
+    put_call_ratio        = row.get("put_call_ratio")
+    days_to_next_earnings = row.get("days_to_next_earnings")
+
     # Decision (Layer 6)
     caution        = row.get("caution_flag", "")
     sentiment_note = row.get("sentiment_note", "")
@@ -128,6 +139,8 @@ RULES:
 - Avoid technical jargon (no RSI, EMA, OBV, drawdown probability, annualised volatility)
 - Be direct and confident
 - Translate all section headers and content to the language specified above
+- Use anomaly_type to explain WHAT kind of anomaly is happening
+- Use group scores to explain WHICH aspect of the stock is unusual
 
 STRUCTURE:
 
@@ -178,6 +191,14 @@ Monthly Price History: {monthly_summary}
 Max Drop Last 30 Days: {drawdown*100:.1f}%
 Anomaly Detected: {anomaly_detected} ({anomaly_score}/4 models triggered)
 Anomaly Scope: {scope}
+Anomaly Type: {anomaly_type}
+Anomaly Breakdown:
+  Volume Flow:     {volume_flow_score:.2f}
+  Volatility Risk: {volatility_risk_score:.2f}
+  Price Momentum:  {price_momentum_score:.2f}
+  Market Context:  {market_context_score:.2f}
+{f"Put/Call Ratio: {put_call_ratio:.2f}" if put_call_ratio is not None and put_call_ratio > 1.2 else ""}
+{f"Earnings in: {days_to_next_earnings} days" if days_to_next_earnings is not None and days_to_next_earnings < 10 else ""}
 Risk Level: {row['severity']}
 Trading Signal: {row.get('trading_signal', 'NEUTRAL')}
 News Sentiment: {sentiment_label}

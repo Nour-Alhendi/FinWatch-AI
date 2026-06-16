@@ -25,6 +25,9 @@ def detect_volume_state():
         df["volume_ma20"] = df["Volume"].rolling(20).mean()
         df["volume_zscore"] = (df["Volume"] - df["volume_ma20"]) / df["Volume"].rolling(20).std()
         df["is_high_volume"] = df["volume_zscore"] > 2
+        # obv_signal: high volume confirming price move → institutional buying/selling signal
+        if "returns" in df.columns:
+            df["obv_signal"] = df["volume_zscore"] * df["returns"]
         df.to_parquet(OUTPUT_DIR / file.name)
         print(f"Saved: {file.name}")
 

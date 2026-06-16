@@ -7,10 +7,10 @@ from pathlib import Path
 
 INPUT_DIR = Path("data/features")
 OUTPUT_DIR = Path("data/features")
-OUTPUT_DIR.mkdir(exist_ok=True, parents=True)
 
 
 def run_volume_trend():
+    OUTPUT_DIR.mkdir(exist_ok=True, parents=True)
     for file in INPUT_DIR.glob("*.parquet"):
         df = pd.read_parquet(file)
 

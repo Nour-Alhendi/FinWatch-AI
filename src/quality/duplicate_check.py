@@ -1,6 +1,8 @@
 import pandas as pd
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[2]
+
 
 # =====================================================
 # Duplicate Check Module
@@ -39,7 +41,7 @@ def check_duplicates(file_path):
 # -----------------------------------------------------
 def run_duplicate_check():
 
-    data_folder = Path("data/raw/raw_corrupted")
+    data_folder = ROOT / "data/raw/raw_clean"
 
     for file in data_folder.glob("*.parquet"):
 

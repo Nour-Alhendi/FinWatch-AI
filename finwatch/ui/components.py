@@ -750,7 +750,7 @@ def render_strategy_box(det_df, dec_row) -> None:
                            "#1de9b6" if mom_sig == "rising" else "#f85149" if mom_sig == "falling" else "#8b949e"))
     if n_anom > 0:
         context_items.append((f"{n_anom}/4 {_anom_tip} triggered", "#e3b341"))
-    if pe_ratio is not None:
+    if pe_ratio is not None and not pd.isna(pe_ratio):
         try:
             pe_val = float(pe_ratio)
             if pe_val < 0:

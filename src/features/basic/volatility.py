@@ -4,9 +4,9 @@
 import pandas as pd
 from pathlib import Path
 
-INPUT_DIR  = Path("data/features")
-OUTPUT_DIR = Path("data/features/")
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+ROOT       = Path(__file__).resolve().parents[3]
+INPUT_DIR  = ROOT / "data/features"
+OUTPUT_DIR = ROOT / "data/features"
 
 # calculate volatility
 def volatility(file_path):
@@ -16,6 +16,7 @@ def volatility(file_path):
 
 # loops overall files and save results
 def run_volatility():
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     for file in INPUT_DIR.glob("*.parquet"):
         df = volatility(file)
         df.to_parquet(OUTPUT_DIR/file.name)

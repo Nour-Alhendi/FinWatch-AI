@@ -1,14 +1,10 @@
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent))
-
-from return_lags import run_return_lags
-from momentum import run_momentum
-from vol_change import run_vol_change
-from trend_strength import run_trend_strength
-from volatility_ratio import run_volatility_ratio
-from volume_trend import run_volume_trend
-from explanation_features import run as run_explanation_features
+from features.advanced.return_lags import run_return_lags
+from features.advanced.momentum import run_momentum
+from features.advanced.vol_change import run_vol_change
+from features.advanced.trend_strength import run_trend_strength
+from features.advanced.volatility_ratio import run_volatility_ratio
+from features.advanced.volume_trend import run_volume_trend
+from features.advanced.explanation_features import run as run_explanation_features
 
 def run_advanced_features():
     print("--- Advanced Features ---")

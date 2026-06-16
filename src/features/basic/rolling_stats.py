@@ -6,7 +6,6 @@ from pathlib import Path
 
 INPUT_DIR =  Path("data/features")
 OUTPUT_DIR = Path("data/features")
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # calculate rolling stats
 def rolling_stats(file_path):
@@ -17,6 +16,7 @@ def rolling_stats(file_path):
 
 # loops overall files and save results
 def run_rolling_stats():
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     for file in INPUT_DIR.glob("*.parquet"):
         df = rolling_stats(file)
         df.to_parquet(OUTPUT_DIR/file.name)

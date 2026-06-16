@@ -6,7 +6,6 @@ from pathlib import Path
 
 INPUT_DIR = Path("data/features")
 OUTPUT_DIR = Path("data/features")
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # calculate correlation
 def correlation(file_path):
@@ -17,6 +16,7 @@ def correlation(file_path):
 
 # loop over all files and saves results
 def run_correlation():
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     for file in INPUT_DIR.glob("*.parquet"):
         if file.name == "^SPX.parquet":
             continue

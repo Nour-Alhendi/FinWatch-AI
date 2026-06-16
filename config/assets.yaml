@@ -58,6 +58,12 @@ assets:
   - ticker: "GOOG"
     name: "Alphabet (Google)"
     sector: "Technology"
+  - ticker: "IBM"
+    name: "IBM"
+    sector: "Technology"
+  - ticker: "NOK"
+    name: "Nokia"
+    sector: "Technology"
 
   # AI & Robotics
   - ticker: "PLTR"
@@ -94,12 +100,6 @@ assets:
     sector: "Consumer Discretionary"
   - ticker: "AMZN"
     name: "Amazon"
-    sector: "Consumer Discretionary"
-  - ticker: "NKE"
-    name: "Nike"
-    sector: "Consumer Discretionary"
-  - ticker: "MCD"
-    name: "McDonald's"
     sector: "Consumer Discretionary"
 
   # Financials
@@ -186,14 +186,8 @@ assets:
   - ticker: "RTX"
     name: "Raytheon Technologies"
     sector: "Industrials"
-  - ticker: "KRKNF"
-    name: "Kraken Robotics"
-    sector: "Industrials"
 
   # Green Energy
-  - ticker: "BE"
-    name: "Bloom Energy"
-    sector: "Green Energy"
   - ticker: "ENPH"
     name: "Enphase Energy"
     sector: "Green Energy"
@@ -217,7 +211,6 @@ assets:
   - ticker: "COIN"
     name: "Coinbase"
     sector: "Crypto & Mining"
-
   # Semiconductors
   - ticker: "AVGO"
     name: "Broadcom"
@@ -228,3 +221,17 @@ assets:
   - ticker: "MU"
     name: "Micron"
     sector: "Semiconductors"
+  - ticker: "MRVL"
+    name: "Marvell Technology"
+    sector: "Semiconductors"
+  - ticker: "ASML"
+    name: "ASML Holding"
+    sector: "Semiconductors"
+
+  # Quantum Computing
+  - ticker: "IONQ"
+    name: "IonQ"
+    sector: "Quantum Computing"
+  - ticker: "QBTS"
+    name: "D-Wave Quantum"
+    sector: "Quantum Computing"

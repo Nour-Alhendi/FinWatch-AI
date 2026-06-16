@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 import streamlit as st
 import pandas as pd
+import plotly.graph_objects as go
 from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
@@ -957,6 +958,60 @@ name   = COMPANY_NAMES.get(ticker, ticker)
 lang   = st.session_state.language
 
 render_stock_header(ticker, name, det_df, lang)
+
+# ── Anomaly Radar Chart ───────────────────────────────────────────────────────
+_RADAR_COLS = {
+    "Volume Flow":     "volume_anomaly_score",
+    "Volatility Risk": "volatility_anomaly_score",
+    "Price Momentum":  "price_anomaly_score",
+    "Market Context":  "context_anomaly_score",
+}
+
+# Try row (decisions) first, fall back to data/features/{ticker}.parquet
+_radar_scores = {label: row.get(col) for label, col in _RADAR_COLS.items()}
+if any(v is None for v in _radar_scores.values()):
+    _feat_path = Path("data/features") / f"{ticker}.parquet"
+    if _feat_path.exists():
+        _feat_df = pd.read_parquet(_feat_path)
+        _last    = _feat_df.iloc[-1]
+        _radar_scores = {label: _last.get(col) for label, col in _RADAR_COLS.items()}
+
+# Only render if all 4 scores are present
+if all(v is not None for v in _radar_scores.values()):
+    _labels = list(_radar_scores.keys())
+    _values = [float(v) for v in _radar_scores.values()]
+
+    _fig = go.Figure(go.Scatterpolar(
+        r=_values + [_values[0]],           # close the polygon
+        theta=_labels + [_labels[0]],
+        fill="toself",
+        fillcolor="rgba(88,166,255,0.08)",
+        line=dict(color="#58a6ff", width=1.5),
+        hovertemplate="%{theta}: %{r:.2f}<extra></extra>",
+    ))
+    _fig.update_layout(
+        polar=dict(
+            bgcolor="#0d1117",
+            radialaxis=dict(
+                visible=True, range=[0, 1],
+                tickvals=[0.25, 0.5, 0.75, 1.0],
+                tickfont=dict(size=8, color="#3d5266", family="IBM Plex Mono"),
+                gridcolor="#1a2332", linecolor="#1a2332",
+            ),
+            angularaxis=dict(
+                tickfont=dict(size=10, color="#8892a4", family="IBM Plex Mono"),
+                gridcolor="#1a2332", linecolor="#1a2332",
+            ),
+        ),
+        paper_bgcolor="#0d1117",
+        margin=dict(t=20, b=20, l=40, r=40),
+        height=260,
+        showlegend=False,
+    )
+    _rc1, _rc2, _rc3 = st.columns([1, 2, 1])
+    with _rc2:
+        st.markdown('<div class="chart-label" style="padding-top:8px;text-align:center">Anomaly Breakdown</div>', unsafe_allow_html=True)
+        st.plotly_chart(_fig, use_container_width=True, config={"displayModeBar": False})
 
 if det_df is not None and "Close" in det_df.columns and len(det_df) > 1:
     render_risk_news_row(ticker, row, det_df, decisions, news_df)

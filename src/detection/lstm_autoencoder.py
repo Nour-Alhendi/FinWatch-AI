@@ -2,19 +2,27 @@
 # Trains separate models for calm and volatile periods.
 # Columns: ae_error, ae_anomaly
 
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
+os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
+os.environ["TF_METAL_DEVICE_ENABLE"] = "0"
+
 import sys
 import numpy as np
 import pandas as pd
 from pathlib import Path
 from sklearn.preprocessing import MinMaxScaler
+import tensorflow as tf
+tf.config.set_visible_devices([], 'GPU')
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import Input, LSTM, RepeatVector, TimeDistributed, Dense, Dropout
 from tensorflow.keras.callbacks import EarlyStopping
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from config.features import LSTM_AE_FEATURES
 
-INPUT_DIR  = Path("data/detection")
-OUTPUT_DIR = Path("data/detection")
+ROOT       = Path(__file__).resolve().parents[2]
+INPUT_DIR  = ROOT / "data/detection"
+OUTPUT_DIR = ROOT / "data/detection"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 SEQUENCE_LENGTH = 20
@@ -25,23 +33,46 @@ SMOOTH_WINDOW   = 5
 N_FEATURES      = len(LSTM_AE_FEATURES)
 
 GROUPS = {
-    "Technology-Stable":   {"tickers": ["AAPL", "MSFT", "GOOG", "INTC"],      "calm_q": 0.65, "percentile": 3},
-    "Technology-Volatile": {"tickers": ["NVDA", "AMD"],                                "calm_q": 0.60, "percentile": 4},
-    "Semiconductors":      {"tickers": ["AVGO", "QCOM", "MU"],                        "calm_q": 0.65, "percentile": 3},
-    "AI-Stable":           {"tickers": ["CRM", "SNOW"],                               "calm_q": 0.65, "percentile": 5},
-    "AI-Volatile":         {"tickers": ["PLTR", "META"],                              "calm_q": 0.65, "percentile": 4},
-    "Cybersecurity":       {"tickers": ["PANW", "CRWD", "NET"],                       "calm_q": 0.65, "percentile": 4},
-    "Consumer-Stable":     {"tickers": ["NKE", "MCD"],                                  "calm_q": 0.65, "percentile": 5},
-    "Consumer-Volatile":   {"tickers": ["TSLA", "AMZN"],                              "calm_q": 0.70, "percentile": 3},
-    "Financials":          {"tickers": ["JPM", "BAC", "GS", "BLK", "V", "MA"],       "calm_q": 0.70, "percentile": 4},
-    "Healthcare":          {"tickers": ["JNJ", "PFE", "UNH", "ABBV", "LLY", "AMGN"], "calm_q": 0.75, "percentile": 3},
-    "Consumer Staples":    {"tickers": ["PG", "KO", "COST", "WMT"],                  "calm_q": 0.70, "percentile": 3},
-    "Energy":              {"tickers": ["XOM", "CVX", "COP", "EOG"],                  "calm_q": 0.70, "percentile": 3},
-    "Industrials":         {"tickers": ["CAT", "HON", "BA", "GE", "RTX"],             "calm_q": 0.70, "percentile": 3},
-    "Green Energy":        {"tickers": ["ENPH", "NEE", "FSLR"],                       "calm_q": 0.75, "percentile": 3},
-    "Crypto-Volatile":     {"tickers": ["IREN", "MARA", "RIOT", "COIN"],              "calm_q": 0.60, "percentile": 5},
-    "SmallCap-Volatile":   {"tickers": ["BE", "KRKNF", "NBIS", "AI"],                 "calm_q": 0.55, "percentile": 5},
+    "Technology-Stable":   {"tickers": ["AAPL", "MSFT", "GOOG", "INTC", "IBM", "DELL"], "calm_q": 0.65, "percentile": 3},
+    "Technology-Volatile": {"tickers": ["NVDA", "AMD", "NOK"],                           "calm_q": 0.60, "percentile": 4},
+    "Semiconductors":      {"tickers": ["AVGO", "QCOM", "MU", "MRVL", "ASML"],          "calm_q": 0.65, "percentile": 3},
+    "AI-Stable":           {"tickers": ["CRM", "SNOW"],                                  "calm_q": 0.65, "percentile": 5},
+    "AI-Volatile":         {"tickers": ["PLTR", "META"],                                 "calm_q": 0.65, "percentile": 4},
+    "Cybersecurity":       {"tickers": ["PANW", "CRWD", "NET"],                          "calm_q": 0.65, "percentile": 4},
+    "Consumer-Volatile":   {"tickers": ["TSLA", "AMZN"],                                 "calm_q": 0.70, "percentile": 3},
+    "Financials":          {"tickers": ["JPM", "BAC", "GS", "BLK", "V", "MA"],          "calm_q": 0.70, "percentile": 4},
+    "Healthcare":          {"tickers": ["JNJ", "PFE", "UNH", "ABBV", "LLY", "AMGN"],   "calm_q": 0.75, "percentile": 3},
+    "Consumer Staples":    {"tickers": ["PG", "KO", "COST", "WMT"],                     "calm_q": 0.70, "percentile": 3},
+    "Energy":              {"tickers": ["XOM", "CVX", "COP", "EOG"],                     "calm_q": 0.70, "percentile": 3},
+    "Industrials":         {"tickers": ["CAT", "HON", "BA", "GE", "RTX"],                "calm_q": 0.70, "percentile": 3},
+    "Green Energy":        {"tickers": ["ENPH", "NEE", "FSLR"],                          "calm_q": 0.75, "percentile": 3},
+    "Crypto-Volatile":     {"tickers": ["IREN", "MARA", "RIOT", "COIN", "APLD"],        "calm_q": 0.60, "percentile": 5},
+    "SmallCap-Volatile":   {"tickers": ["NBIS", "AI"],                                   "calm_q": 0.55, "percentile": 5},
+    "Quantum":             {"tickers": ["IONQ", "QBTS"],                                 "calm_q": 0.55, "percentile": 5},
 }
+
+# Crisis windows excluded from calm_training (scaler + threshold calibration)
+ALL_CRISES = [
+    ("2020-02-01", "2020-04-30"),  # COVID crash — all groups
+    ("2022-01-01", "2022-10-31"),  # Fed shock — all groups
+    ("2025-04-01", "2025-04-30"),  # Trump tariffs — all groups (post-2024, no effect until split_date moves)
+    ("2026-03-01", "2026-03-31"),  # February fade — all groups (post-2024)
+]
+
+GROUP_CRISES = {
+    "Energy":      [("2022-02-01", "2022-03-31"), ("2026-03-01", "2026-03-31")],  # Ukraine + Iran war
+    "Industrials": [("2022-02-01", "2022-03-31"), ("2026-03-01", "2026-03-31")],  # Ukraine + Iran war
+    "Financials":  [("2023-03-01", "2023-03-31")],                                 # SVB
+}
+
+
+def get_calm_mask(df: pd.DataFrame, group_name: str) -> pd.Series:
+    """Returns bool Series — True = calm day (not in any crisis window)."""
+    mask = pd.Series(True, index=df.index)
+    for start, end in ALL_CRISES + GROUP_CRISES.get(group_name, []):
+        crisis = (df["Date"] >= pd.Timestamp(start)) & (df["Date"] <= pd.Timestamp(end))
+        mask = mask & ~crisis
+    return mask
 
 
 def build_model():
@@ -69,6 +100,7 @@ def get_errors(model, X):
 
 
 def run_autoencoder():
+    tf.config.set_visible_devices([], 'GPU')
     early_stop = EarlyStopping(monitor="val_loss", patience=10, restore_best_weights=True)
     Path("models").mkdir(exist_ok=True)
     split_date = pd.Timestamp("2024-01-01")
@@ -101,25 +133,33 @@ def run_autoencoder():
         low_frames  = []
         high_frames = []
 
-        # Threshold and scaler only from training data (no lookahead)
+        # Scaler fit on calm training data (crisis excluded, no regime split)
+        # Full training data (all dates, low/high split) used for model weights
         for df in frames:
             train_df = df[df["_is_train"]]
             vol_threshold = train_df["volatility"].quantile(calm_q)
             df["_is_low_vol"]    = df["volatility"] <= vol_threshold
             df["_vol_threshold"] = vol_threshold
 
-            scaler_low  = MinMaxScaler()
-            scaler_high = MinMaxScaler()
+            # Calm training: exclude crisis periods, fit a single unified scaler
+            calm_mask  = get_calm_mask(df, group_name)
+            calm_train = df[df["_is_train"] & calm_mask].copy().reset_index(drop=True)
 
+            if len(calm_train) < SEQUENCE_LENGTH:
+                print(f"  Skipping {df['_ticker'].iloc[0]}: not enough calm training data ({len(calm_train)} rows)")
+                continue
+
+            scaler = MinMaxScaler()
+            scaler.fit(calm_train[LSTM_AE_FEATURES])
+
+            # Full training splits — scaled with calm scaler, crisis extremes clipped to [0, 1]
             low_df_train  = df[df["_is_low_vol"] &  df["_is_train"]].copy().reset_index(drop=True)
             high_df_train = df[~df["_is_low_vol"] & df["_is_train"]].copy().reset_index(drop=True)
 
             if len(low_df_train) > SEQUENCE_LENGTH:
-                scaler_low.fit(low_df_train[LSTM_AE_FEATURES])
-                scaler_high.fit(high_df_train[LSTM_AE_FEATURES])
-                low_df_train[LSTM_AE_FEATURES]  = scaler_low.transform(low_df_train[LSTM_AE_FEATURES])
-                high_df_train[LSTM_AE_FEATURES] = scaler_high.transform(high_df_train[LSTM_AE_FEATURES])
-                low_frames.append((df, low_df_train, high_df_train, scaler_low, scaler_high))
+                low_df_train[LSTM_AE_FEATURES]  = np.clip(scaler.transform(low_df_train[LSTM_AE_FEATURES]),  0, 1)
+                high_df_train[LSTM_AE_FEATURES] = np.clip(scaler.transform(high_df_train[LSTM_AE_FEATURES]), 0, 1)
+                low_frames.append((df, low_df_train, high_df_train, scaler, calm_mask))
 
         if not low_frames:
             print(f"Skipping group {group_name}: not enough low-vol data")
@@ -129,7 +169,7 @@ def run_autoencoder():
         X_train_low  = []
         X_train_high = []
 
-        for (df, low_df_train, high_df_train, scaler_low, scaler_high) in low_frames:
+        for (df, low_df_train, high_df_train, scaler, calm_mask) in low_frames:
             if len(low_df_train) > SEQUENCE_LENGTH:
                 X_train_low.append(build_sequences(low_df_train[LSTM_AE_FEATURES].values))
             if len(high_df_train) > SEQUENCE_LENGTH:
@@ -171,7 +211,7 @@ def run_autoencoder():
                 print(f"[{group_name}] high_vol_model trained and saved")
 
         # Predict and save per ticker
-        for (df, low_df_train, high_df_train, scaler_low, scaler_high) in low_frames:
+        for (df, low_df_train, high_df_train, scaler, calm_mask) in low_frames:
             ticker        = df["_ticker"].iloc[0]
             vol_threshold = df["_vol_threshold"].iloc[0]
 
@@ -181,31 +221,53 @@ def run_autoencoder():
             orig_df["ae_anomaly"] = False
             feat_df["_is_low_vol"] = feat_df["volatility"] <= vol_threshold
 
-            # Low vol regime prediction
+            # Recompute calm mask on feat_df for threshold calculation
+            calm_feat = get_calm_mask(feat_df, group_name)
+
             low_idx  = feat_df[feat_df["_is_low_vol"]].index
             high_idx = feat_df[~feat_df["_is_low_vol"]].index
 
+            # Low vol regime prediction — scaler from calm, clip crisis values
             if len(low_idx) > SEQUENCE_LENGTH:
-                low_scaled  = scaler_low.transform(feat_df.loc[low_idx, LSTM_AE_FEATURES])
-                X_low_all   = build_sequences(low_scaled)
-                errors_low  = get_errors(model_low, X_low_all)
-                train_low_idx = feat_df[feat_df["_is_low_vol"] & (feat_df["Date"] < split_date)].index
-                train_low_errors = get_errors(model_low, build_sequences(scaler_low.transform(feat_df.loc[train_low_idx, LSTM_AE_FEATURES])))
-                threshold_low = np.percentile(train_low_errors, 100 - perc)
-                target_dates  = feat_df.loc[low_idx[SEQUENCE_LENGTH:SEQUENCE_LENGTH + len(errors_low)], "Date"].values
+                low_scaled = np.clip(scaler.transform(feat_df.loc[low_idx, LSTM_AE_FEATURES]), 0, 1)
+                X_low_all  = build_sequences(low_scaled)
+                errors_low = get_errors(model_low, X_low_all)
+
+                # Threshold from calm low-vol training days only
+                calm_low_idx = feat_df[feat_df["_is_low_vol"] & (feat_df["Date"] < split_date) & calm_feat].index
+                if len(calm_low_idx) > SEQUENCE_LENGTH:
+                    calm_low_scaled  = np.clip(scaler.transform(feat_df.loc[calm_low_idx, LSTM_AE_FEATURES]), 0, 1)
+                    calm_low_errors  = get_errors(model_low, build_sequences(calm_low_scaled))
+                else:
+                    # Fallback: all calm training data through model_low
+                    calm_all_idx     = feat_df[(feat_df["Date"] < split_date) & calm_feat].index
+                    calm_all_scaled  = np.clip(scaler.transform(feat_df.loc[calm_all_idx, LSTM_AE_FEATURES]), 0, 1)
+                    calm_low_errors  = get_errors(model_low, build_sequences(calm_all_scaled))
+                threshold_low = np.percentile(np.asarray(calm_low_errors, dtype=float), 100 - perc)
+
+                target_dates = feat_df.loc[low_idx[SEQUENCE_LENGTH:SEQUENCE_LENGTH + len(errors_low)], "Date"].values
                 mask = orig_df["Date"].isin(target_dates)
                 orig_df.loc[mask, "ae_error"]   = errors_low
                 orig_df.loc[mask, "ae_anomaly"] = errors_low > threshold_low
 
-            # High vol regime prediction
+            # High vol regime prediction — same calm scaler, clip crisis values
             if len(high_idx) > SEQUENCE_LENGTH:
-                high_scaled  = scaler_high.transform(feat_df.loc[high_idx, LSTM_AE_FEATURES])
-                X_high_all   = build_sequences(high_scaled)
-                errors_high  = get_errors(model_high, X_high_all)
-                train_high_idx = feat_df[~feat_df["_is_low_vol"] & (feat_df["Date"] < split_date)].index
-                train_high_errors = get_errors(model_high, build_sequences(scaler_high.transform(feat_df.loc[train_high_idx, LSTM_AE_FEATURES])))
-                threshold_high = np.percentile(train_high_errors, 100 - perc)
-                target_dates  = feat_df.loc[high_idx[SEQUENCE_LENGTH:SEQUENCE_LENGTH + len(errors_high)], "Date"].values
+                high_scaled = np.clip(scaler.transform(feat_df.loc[high_idx, LSTM_AE_FEATURES]), 0, 1)
+                X_high_all  = build_sequences(high_scaled)
+                errors_high = get_errors(model_high, X_high_all)
+
+                # Threshold from calm high-vol training days only
+                calm_high_idx = feat_df[~feat_df["_is_low_vol"] & (feat_df["Date"] < split_date) & calm_feat].index
+                if len(calm_high_idx) > SEQUENCE_LENGTH:
+                    calm_high_scaled = np.clip(scaler.transform(feat_df.loc[calm_high_idx, LSTM_AE_FEATURES]), 0, 1)
+                    calm_high_errors = get_errors(model_high, build_sequences(calm_high_scaled))
+                else:
+                    calm_all_idx     = feat_df[(feat_df["Date"] < split_date) & calm_feat].index
+                    calm_all_scaled  = np.clip(scaler.transform(feat_df.loc[calm_all_idx, LSTM_AE_FEATURES]), 0, 1)
+                    calm_high_errors = get_errors(model_high, build_sequences(calm_all_scaled))
+                threshold_high = np.percentile(np.asarray(calm_high_errors, dtype=float), 100 - perc)
+
+                target_dates = feat_df.loc[high_idx[SEQUENCE_LENGTH:SEQUENCE_LENGTH + len(errors_high)], "Date"].values
                 mask = orig_df["Date"].isin(target_dates)
                 orig_df.loc[mask, "ae_error"]   = errors_high
                 orig_df.loc[mask, "ae_anomaly"] = errors_high > threshold_high

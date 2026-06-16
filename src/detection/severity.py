@@ -5,8 +5,9 @@
 import pandas as pd
 from pathlib import Path
 
-INPUT_DIR = Path("data/detection")
-OUTPUT_DIR = Path("data/detection")
+ROOT       = Path(__file__).resolve().parents[2]
+INPUT_DIR  = ROOT / "data/detection"
+OUTPUT_DIR = ROOT / "data/detection"
 
 
 def classify_severity(score):

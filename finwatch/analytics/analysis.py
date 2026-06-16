@@ -143,7 +143,7 @@ def build_analysis(det_df, dec_row, ticker, name, lang="english"):
     _TIPS = _TIPS_ALL.get(lang, _TIPS_ALL["english"])
 
     def r_row(ic, txt):
-        tip = next((v for k, v in _TIPS.items() if k.lower() in txt.lower()), "")
+        tip = next((v for k, v in _TIPS.items() if isinstance(txt, str) and k.lower() in txt.lower()), "")
         if tip:
             tip = tip.replace('&', '&amp;').replace('"', '&quot;').replace('<', '&lt;').replace('>', '&gt;')
         tip_attr = f' data-tip="{tip}"' if tip else ""
@@ -215,7 +215,7 @@ def build_analysis(det_df, dec_row, ticker, name, lang="english"):
         r_row(va_ic,  f"Ann. vol: {vol_ann:.1f}%") +
         r_row(act_ic, f"Action: {action}")
     )
-    if caution:
+    if caution and isinstance(caution, str):
         fcast_html += r_row(warn("⚠"), caution)
 
     main_html = (

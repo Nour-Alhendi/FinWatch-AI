@@ -1,6 +1,8 @@
 import pandas as pd
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[2]
+
 def check_missing_values(file_path):
     """
     Check missing values in a parquet file
@@ -21,7 +23,7 @@ def run_missing_check():
     Run missing value checks for all assets
     """
 
-    data_folder = Path("data/raw/raw_corrupted")
+    data_folder = ROOT / "data/raw/raw_clean"
 
     for file in data_folder.glob("*.parquet"):
         missing_report = check_missing_values(file)

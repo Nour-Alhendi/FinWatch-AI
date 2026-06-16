@@ -6,6 +6,8 @@
 import pandas as pd
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[2]
+
 # --------------------------------------------------
 # Funktion: check_time_gaps
 # Purpose: Detect gaps in trading dates
@@ -28,7 +30,7 @@ def check_time_gaps(file_path):
 # Function: run_gap_check
 # =====================================================
 def run_gap_check():
-    data_folder = Path("data/raw/raw_corrupted")
+    data_folder = ROOT / "data/raw/raw_clean"
     for file in data_folder.glob("*.parquet"):
         gaps = check_time_gaps(file)
         

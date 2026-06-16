@@ -19,6 +19,28 @@ from pathlib import Path
 ROOT      = Path(__file__).resolve().parents[2]
 MODEL_DIR = ROOT / "models"
 
+# XGBoost 3.x serialises base_score as '[5E-1]' (bracketed string) inside UBJ.
+# SHAP <0.50 calls float() on it and crashes. Patch SHAP's UBJ decoder to strip
+# the brackets before the value is used — this is a one-liner fix equivalent to
+# what SHAP 0.50 added natively, but compatible with numpy<2.
+try:
+    from shap.explainers.other._ubjson import decode_ubjson_buffer as _orig_ubj  # type: ignore[import]
+    from shap.explainers import _tree as _shap_tree  # type: ignore[import]
+
+    def _ubj_fixed(buf):
+        result = _orig_ubj(buf)
+        try:
+            bs = result["learner"]["learner_model_param"]["base_score"]
+            if isinstance(bs, str) and bs.startswith("[") and bs.endswith("]"):
+                result["learner"]["learner_model_param"]["base_score"] = bs[1:-1]
+        except (KeyError, TypeError):
+            pass
+        return result
+
+    _shap_tree.decode_ubjson_buffer = _ubj_fixed
+except Exception:
+    pass
+
 
 def compute(data: pd.DataFrame, features: list[str]) -> tuple[pd.DataFrame, np.ndarray]:
     """

@@ -32,7 +32,8 @@ COLUMN_ALIASES = {
 # Columns to drop if present (not needed for analysis)
 COLUMNS_TO_DROP = ["Adj Close", "Dividends", "Stock Splits", "Capital Gains"]
 
-LOG_DIR = Path("data/logs")
+ROOT    = Path(__file__).resolve().parents[2]
+LOG_DIR = ROOT / "data/logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -154,7 +155,7 @@ def check_schema(file_path):
 # -----------------------------------------------------
 def run_schema_validation():
 
-    data_folder = Path("data/raw/raw_corrupted")
+    data_folder = ROOT / "data/raw/raw_clean"
     files       = list(data_folder.glob("*.parquet"))
 
     if not files:

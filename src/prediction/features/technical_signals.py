@@ -51,7 +51,8 @@ def add_stock_ma_features(data: pd.DataFrame) -> pd.DataFrame:
         df["price_vs_ma50_stock"]  = (close / ma50  - 1).where(ma50  > 0, 0.0)
         df["price_vs_ma200_stock"] = (close / ma200 - 1).where(ma200 > 0, 0.0)
         return df
-    return data.groupby("ticker", group_keys=False).apply(_per_ticker)
+    frames = [_per_ticker(grp) for _, grp in data.groupby("ticker", sort=False)]
+    return pd.concat(frames, ignore_index=True) if frames else data
 
 
 def add_technical_signals(data: pd.DataFrame) -> pd.DataFrame:
@@ -173,7 +174,8 @@ def add_technical_signals(data: pd.DataFrame) -> pd.DataFrame:
 
         return df
 
-    return data.groupby("ticker", group_keys=False).apply(_per_ticker)
+    frames = [_per_ticker(grp) for _, grp in data.groupby("ticker", sort=False)]
+    return pd.concat(frames, ignore_index=True) if frames else data
 
 
 # Columns added by add_technical_signals() — used to extract latest values per ticker
