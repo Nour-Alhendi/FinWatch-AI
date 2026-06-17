@@ -210,6 +210,71 @@ def get_portfolio_overview() -> dict:
         "stocks":           stocks,
     }
 
+def get_macro_context() -> dict:
+    """Get current macro environment: 10Y Treasury yield, Dollar Index, VIX,
+    and their interpretations (rate_env, dollar_env, vix_env, risk_off flag).
+    Use when the user asks about macro conditions, interest rates, dollar, or
+    market-wide risk environment. Takes no arguments.
+    """
+    path = ROOT / "data/macro_context.parquet"
+    if not path.exists():
+        return {"error": "No macro data available"}
+    row = pd.read_parquet(path).iloc[-1]
+    return {
+        "treasury_10y": row["treasury_10y"],
+        "dollar_index":  row["dollar_index"],
+        "vix":           row["vix"],
+        "rate_env":      row["rate_env"],
+        "dollar_env":    row["dollar_env"],
+        "vix_env":       row["vix_env"],
+        "risk_off":      bool(row["risk_off"]),
+    }
+
+
+def get_earnings_calendar() -> dict:
+    """Get upcoming earnings dates for monitored stocks in the next 30 days.
+    Use when the user asks about earnings, upcoming events, or why a stock
+    might be volatile soon. Takes no arguments.
+    """
+    path = ROOT / "data/earnings_calendar.parquet"
+    if not path.exists():
+        return {"error": "No earnings data available"}
+    df = pd.read_parquet(path)
+    if df.empty:
+        return {"earnings": [], "message": "No upcoming earnings in next 30 days"}
+    return {
+        "earnings": df.sort_values("days_until")[
+            ["ticker", "earnings_date", "days_until", "earnings_soon"]
+        ].to_dict(orient="records"),
+        "soon": df[df["earnings_soon"] == True]["ticker"].tolist(),
+    }
+
+
+def get_correlation_risk(ticker: str) -> dict:
+    """Get correlation risk for a stock: average correlation with the portfolio,
+    number of highly correlated peers, and concentration risk level.
+    Use when the user asks about correlation, diversification, or cluster risk.
+
+    Args:
+        ticker: Stock symbol, e.g. 'AAPL'
+    """
+    ticker = ticker.upper()
+    path = ROOT / "data/correlation_risk.parquet"
+    if not path.exists():
+        return {"error": "No correlation data available"}
+    df = pd.read_parquet(path)
+    row = df[df["ticker"] == ticker]
+    if row.empty:
+        return {"error": f"No correlation data for {ticker}"}
+    row = row.iloc[0]
+    return {
+        "ticker":             ticker,
+        "avg_correlation":    row["avg_correlation"],
+        "high_corr_count":    int(row["high_corr_count"]),
+        "high_corr_peers":    row["high_corr_peers"],
+        "concentration_risk": row["concentration_risk"],
+    }
+
 def get_sector_analysis() -> dict:
     """Get a sector-level breakdown: for each sector, the tickers, severity counts,
     signal counts, and average drawdown probability.

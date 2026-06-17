@@ -1,10 +1,16 @@
-# FinWatch AI — LlamaIndex Agent
-# Registers the 8 tools and connects them to a Groq LLM.
+"""
+FinWatch AI — Agent (Groq SDK, plain tool loop)
 
+Uses the Groq Python SDK directly instead of LlamaIndex FunctionAgent.
+This avoids the parallel-tool-call parsing bug where llama-3.3-70b-versatile
+merges the tool name and JSON arguments into a single string.
+"""
+
+from __future__ import annotations
+import json
 import os
-import asyncio
-from llama_index.core.agent.workflow import ReActAgent
-from llama_index.llms.groq import Groq
+from typing import Any, Callable
+import groq
 
 from src.agent.tools import (
     get_stock_analysis,
@@ -14,62 +20,218 @@ from src.agent.tools import (
     get_news_sentiment,
     get_trend_analysis,
     get_portfolio_overview,
+    get_macro_context,
+    get_earnings_calendar,
+    get_correlation_risk,
     get_sector_analysis,
+
 )
 
-SYSTEM_PROMPT = """You are FinWatch AI, a financial risk analyst assistant.
-You monitor a portfolio of equities for anomalies and drawdown risk.
+_MODEL = "llama-3.3-70b-versatile"
+_MAX_TURNS = 8       # tool-call iterations before giving up
+_MAX_TOKENS = 1024   # enough for a thorough answer; keeps daily usage sane
 
-You have tools to look up stock analysis, risk metrics, anomaly explanations,
-market context, news sentiment, trend indicators, portfolio overview, and
-sector analysis. Always use the tools to get real data — never make up numbers.
+_SYSTEM_PROMPT = """\
+You are FinWatch AI, a financial risk analyst assistant.
+Use the provided tools to answer questions about stocks, sectors, and portfolio risk.
+Always call the relevant tool(s) first — never invent numbers.
+Be concise and precise. Cite the concrete values the tools return.
+If a tool returns an error, say so honestly.
+You may reply in the language the user writes in (English or German).
 
-When answering:
-- Be concise and precise, like a professional risk analyst.
-- Cite the concrete numbers the tools return (e.g. VaR, drawdown probability).
-- If a tool returns an error or no data, say so honestly.
-- You may answer in the language the user writes in (English, German, or Arabic).
+Signal terminology: the tools return internal codes (ENTRY/HOLD/EXIT).
+When reporting these to the user, translate them as follows:
+  ENTRY → FAVORABLE (lower-risk profile, models see positive conditions)
+  HOLD  → MONITOR   (mixed or neutral signals, no strong direction)
+  EXIT  → ELEVATED  (elevated risk, models flag significant downside probability)
+  NEUTRAL → NEUTRAL, WATCH → MONITOR, REDUCE/BUY_SIGNAL map to ELEVATED/FAVORABLE.
 
-IMPORTANT — Regulatory constraint:
-- You must NEVER give financial advice or recommendations to buy, sell, or hold.
-- You do NOT tell the user what to do with their money or positions.
-- You only describe and explain the data: risk metrics, anomalies, trends, context.
-- If the user asks "should I buy/sell X?", explain the risk picture from the data
-  and explicitly state that you cannot give investment recommendations.
-
-This is decision-support and information only, not financial advice.
+Regulatory constraint: describe risk posture only — never recommend buying,
+selling, or holding any asset. You describe what the models see, not what
+the user should do.
 """
 
+_TOOL_MAP: dict[str, Callable[..., Any]] = {
+    "get_stock_analysis":    get_stock_analysis,
+    "get_risk_metrics":      get_risk_metrics,
+    "explain_anomaly":       explain_anomaly,
+    "get_market_context":    get_market_context,
+    "get_news_sentiment":    get_news_sentiment,
+    "get_trend_analysis":    get_trend_analysis,
+    "get_portfolio_overview": get_portfolio_overview,
+    "get_macro_context":     get_macro_context,      
+    "get_earnings_calendar": get_earnings_calendar,  
+    "get_correlation_risk":  get_correlation_risk,
+    "get_sector_analysis":   get_sector_analysis, 
+}
 
-def build_agent():
-    llm = Groq(
-        model="llama-3.3-70b-versatile",
-        api_key=os.environ["GROQ_API_KEY"],
-    )
+# Concise schemas — short descriptions reduce prompt tokens on every call
+_TOOLS_SCHEMA: list[dict] = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_stock_analysis",
+            "description": "Overall assessment for a stock: severity, trading signal, drawdown probability, anomaly type, confidence.",
+            "parameters": {
+                "type": "object",
+                "properties": {"ticker": {"type": "string", "description": "e.g. 'AAPL'"}},
+                "required": ["ticker"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_risk_metrics",
+            "description": "Risk metrics: VaR 95%, Expected Shortfall 95%, ES ratio, 30-day max drawdown.",
+            "parameters": {
+                "type": "object",
+                "properties": {"ticker": {"type": "string"}},
+                "required": ["ticker"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "explain_anomaly",
+            "description": "Why a stock is anomalous: SHAP drivers, anomaly group scores (volume/volatility/price/context), LLM narrative.",
+            "parameters": {
+                "type": "object",
+                "properties": {"ticker": {"type": "string"}},
+                "required": ["ticker"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_market_context",
+            "description": "Market context for a stock: regime (bull/bear/neutral), volatility regime, market-wide anomaly flag.",
+            "parameters": {
+                "type": "object",
+                "properties": {"ticker": {"type": "string"}},
+                "required": ["ticker"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_news_sentiment",
+            "description": "News sentiment: VADER score, FinBERT score, LLM news summary, top headlines.",
+            "parameters": {
+                "type": "object",
+                "properties": {"ticker": {"type": "string"}},
+                "required": ["ticker"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_trend_analysis",
+            "description": "Trend indicators: MA50, MA200, 5d/10d momentum, RSI, trend strength, volume trend.",
+            "parameters": {
+                "type": "object",
+                "properties": {"ticker": {"type": "string"}},
+                "required": ["ticker"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_portfolio_overview",
+            "description": "Portfolio-wide summary: total stocks monitored, severity distribution, signal distribution.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_sector_analysis",
+            "description": "Sector breakdown: severity counts and average drawdown probability per sector.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+]
 
-    agent = ReActAgent(
-        tools=[
-            get_stock_analysis,
-            get_risk_metrics,
-            explain_anomaly,
-            get_market_context,
-            get_news_sentiment,
-            get_trend_analysis,
-            get_portfolio_overview,
-            get_sector_analysis,
-        ],
-        llm=llm,
-        system_prompt=SYSTEM_PROMPT,
-    )
-    return agent
+
+class FinWatchAgent:
+    """Thin wrapper around the Groq SDK. Runs a synchronous tool-call loop."""
+
+    def __init__(self) -> None:
+        self._client = groq.Groq(api_key=os.environ["GROQ_API_KEY"])
+
+    def run(self, prompt: str) -> tuple[str, list[str]]:
+        """
+        Run one user turn through the tool loop.
+
+        Returns:
+            answer      — the model's final text response
+            tool_names  — deduplicated list of tools that were called
+        """
+        messages: list[dict] = [
+            {"role": "system", "content": _SYSTEM_PROMPT},
+            {"role": "user",   "content": prompt},
+        ]
+        tool_names: list[str] = []
+        seen: set[str] = set()
+
+        for _ in range(_MAX_TURNS):
+            resp = self._client.chat.completions.create(
+                model=_MODEL,
+                messages=messages,
+                tools=_TOOLS_SCHEMA,
+                tool_choice="auto",
+                max_tokens=_MAX_TOKENS,
+                temperature=0.1,
+            )
+            msg = resp.choices[0].message
+
+            # No tool calls → final answer
+            if not msg.tool_calls:
+                return (msg.content or "").strip(), tool_names
+
+            # Collect tool names for the UI chips
+            for tc in msg.tool_calls:
+                name = tc.function.name
+                if name not in seen:
+                    seen.add(name)
+                    tool_names.append(name)
+
+            # Append assistant message (with tool_calls attached)
+            messages.append(msg)
+
+            # Execute each tool and append results
+            for tc in msg.tool_calls:
+                fn = _TOOL_MAP.get(tc.function.name)
+                if fn is None:
+                    result: object = {"error": f"Unknown tool: {tc.function.name}"}
+                else:
+                    try:
+                        args = json.loads(tc.function.arguments or "{}")
+                        result = fn(**args)
+                    except Exception as exc:
+                        result = {"error": str(exc)}
+
+                messages.append({
+                    "role":         "tool",
+                    "tool_call_id": tc.id,
+                    "content":      json.dumps(result, default=str),
+                })
+
+        return "Maximum tool iterations reached.", tool_names
 
 
-async def main():
-    agent = build_agent()
-    response = await agent.run("Wie sieht das Risiko für AAPL aus?")
-    print("\n--- ANTWORT ---")
-    print(response)
+def build_agent() -> FinWatchAgent:
+    return FinWatchAgent()
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    agent = build_agent()
+    answer, tools = agent.run("Give me a full risk breakdown for DELL.")
+    print("Tools called:", tools)
+    print("\n--- ANSWER ---")
+    print(answer)
