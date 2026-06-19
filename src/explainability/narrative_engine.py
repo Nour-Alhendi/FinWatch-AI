@@ -60,31 +60,31 @@ def build(severity: str, obv: float, driver_shap: float) -> tuple[str, str]:
     if severity in BEARISH_SEVERITIES and obv < OBV_SELL_WEAK:
         return (
             "signals_aligned_bearish",
-            "Alle Signale zeigen in dieselbe Richtung — höchste Priorität.",
+            "All signals aligned — high-priority risk flag.",
         )
 
     # Rule 2: severity bullish + OBV confirms buying pressure
     if severity in BULLISH_SEVERITIES and obv > OBV_BUY_WEAK:
         return (
             "signals_aligned_bullish",
-            "Starker Aufwärtstrend bestätigt durch Kaufdruck.",
+            "Strong uptrend confirmed by buying pressure.",
         )
 
     # Rule 3: conflict — dangerous
     if severity in BEARISH_SEVERITIES and obv > OBV_BUY_STRONG:
         return (
             "conflict_dead_cat_bounce",
-            "Modell warnt, aber Kaufdruck erkannt — möglicher Dead Cat Bounce.",
+            "Model flags risk but buying pressure detected — possible dead-cat bounce.",
         )
 
     # Rule 4: blind spot
     if severity in BULLISH_SEVERITIES and obv < OBV_SELL_STRONG:
         return (
             "blind_spot_review",
-            "Modell sieht kein Risiko, aber Verkaufsdruck steigt — REVIEW empfohlen.",
+            "Model sees no risk, but selling pressure is rising — REVIEW recommended.",
         )
 
     return (
         "mixed",
-        "Gemischte Signale — keine eindeutige Ausrichtung.",
+        "Mixed signals — no clear direction.",
     )
