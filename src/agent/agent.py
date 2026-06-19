@@ -8,9 +8,31 @@ merges the tool name and JSON arguments into a single string.
 
 from __future__ import annotations
 import json
+import logging
 import os
 from typing import Any, Callable
 import groq
+
+_log = logging.getLogger(__name__)
+
+
+def _classify_error(exc: Exception) -> str:
+    """Map any caught exception to a clean user-facing message; log the full detail."""
+    _log.error("AI Analyst error (%s): %s", type(exc).__name__, exc, exc_info=True)
+    msg = str(exc).lower()
+    if isinstance(exc, groq.RateLimitError) or "rate_limit" in msg or "429" in msg:
+        return (
+            "⚠️ The AI Analyst has reached its daily request limit. "
+            "Please try again later. (Data and dashboards remain fully available.)"
+        )
+    if (
+        isinstance(exc, (groq.APIConnectionError, groq.APITimeoutError))
+        or "connection" in msg
+        or "timeout" in msg
+        or "network" in msg
+    ):
+        return "⚠️ The AI Analyst is temporarily unavailable. Please try again in a moment."
+    return "⚠️ Something went wrong while generating the answer. Please rephrase or try again."
 
 from src.agent.tools import (
     get_stock_analysis,
@@ -37,7 +59,6 @@ Use the provided tools to answer questions about stocks, sectors, and portfolio 
 Always call the relevant tool(s) first — never invent numbers.
 Be concise and precise. Cite the concrete values the tools return.
 If a tool returns an error, say so honestly.
-You may reply in the language the user writes in (English or German).
 
 Signal terminology: the tools return internal codes (ENTRY/HOLD/EXIT).
 When reporting these to the user, translate them as follows:
@@ -50,6 +71,18 @@ Regulatory constraint: describe risk posture only — never recommend buying,
 selling, or holding any asset. You describe what the models see, not what
 the user should do.
 """
+
+_LANG_INSTRUCTIONS: dict[str, str] = {
+    "en": (
+        "Respond in English only. "
+        "Keep signal labels FAVORABLE, MONITOR, ELEVATED in uppercase as-is."
+    ),
+    "de": (
+        "Antworte ausschließlich auf Deutsch. "
+        "Behalte die Signalbegriffe FAVORABLE, MONITOR, ELEVATED in Großbuchstaben unverändert. "
+        "Alle anderen Texte, Erklärungen und Werte müssen auf Deutsch sein."
+    ),
+}
 
 _TOOL_MAP: dict[str, Callable[..., Any]] = {
     "get_stock_analysis":    get_stock_analysis,
@@ -164,7 +197,7 @@ class FinWatchAgent:
     def __init__(self) -> None:
         self._client = groq.Groq(api_key=os.environ["GROQ_API_KEY"])
 
-    def run(self, prompt: str) -> tuple[str, list[str]]:
+    def run(self, prompt: str, lang: str = "en") -> tuple[str, list[str]]:
         """
         Run one user turn through the tool loop.
 
@@ -172,22 +205,27 @@ class FinWatchAgent:
             answer      — the model's final text response
             tool_names  — deduplicated list of tools that were called
         """
+        lang_note = _LANG_INSTRUCTIONS.get(lang, _LANG_INSTRUCTIONS["en"])
+        system_content = f"{_SYSTEM_PROMPT}\nLanguage: {lang_note}"
         messages: list[dict] = [
-            {"role": "system", "content": _SYSTEM_PROMPT},
+            {"role": "system", "content": system_content},
             {"role": "user",   "content": prompt},
         ]
         tool_names: list[str] = []
         seen: set[str] = set()
 
         for _ in range(_MAX_TURNS):
-            resp = self._client.chat.completions.create(
-                model=_MODEL,
-                messages=messages,
-                tools=_TOOLS_SCHEMA,
-                tool_choice="auto",
-                max_tokens=_MAX_TOKENS,
-                temperature=0.1,
-            )
+            try:
+                resp = self._client.chat.completions.create(
+                    model=_MODEL,
+                    messages=messages,
+                    tools=_TOOLS_SCHEMA,
+                    tool_choice="auto",
+                    max_tokens=_MAX_TOKENS,
+                    temperature=0.1,
+                )
+            except Exception as exc:
+                return _classify_error(exc), tool_names
             msg = resp.choices[0].message
 
             # No tool calls → final answer
