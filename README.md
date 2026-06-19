@@ -2,7 +2,7 @@
 
 **AI-powered Financial Risk Assessment & Decision Support System**
 
-> Monitors 58 stocks across 13 sectors and 11 sector ETFs daily — detects anomalies, classifies risk severity, and produces an explainable risk signal for every asset.
+> Monitors 58 stocks across 13 sectors and 13 sector ETFs daily — detects anomalies, classifies risk severity, and produces an explainable risk signal for every asset.
 
 ![FinWatch AI — Command Center](docs/screenshot-command-center.png)
 
@@ -46,23 +46,7 @@ The dashboard displays three risk-level signals:
 | **MONITOR** | Mixed or neutral signals — no strong directional risk |
 | **ELEVATED** | Elevated risk — models flag significant downside probability |
 
-> Internally, the decision engine uses trading-signal codes (origin of the backtest logic); the product relabels them as risk posture at render time. No pipeline logic was changed.
-
----
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Data ingestion | Twelve Data API (OHLCV), yfinance (fundamentals), Finnhub (news + analyst ratings) |
-| Storage | Parquet (per-ticker), structured `data/` layout |
-| Feature engineering | pandas, numpy — 30+ features per ticker |
-| Anomaly detection | LSTM Autoencoder (Keras), Isolation Forest (scikit-learn), Z-Score |
-| Prediction | XGBoost, LightGBM, Logistic Regression meta-model stacking |
-| Explainability | SHAP (TreeExplainer), VADER, Groq LLM contextual scoring (`llama-3.3-70b-versatile`) |
-| AI Analyst | Groq SDK direct tool-call loop — `llama-3.3-70b-versatile`, 11 tools |
-| Dashboard | Streamlit, 4-screen dark-theme UI, EN/DE language toggle |
-| Language | Python 3.11 |
+> Internally, the decision engine uses trading-action codes (origin of the backtest logic); the product relabels them as risk posture at render time. No pipeline logic was changed.
 
 ---
 
@@ -77,7 +61,7 @@ The system runs an **8-layer modular pipeline**:
 | 3 | Feature Engineering | 30+ features: returns, RSI, momentum, regime, ETF context, price context for LLM |
 | 4 | Anomaly Detection | 4-model ensemble → weighted continuous score (0–1) |
 | 5 | Prediction + Fundamentals | Drawdown probability + meta-model stacking + valuation signals |
-| 6 | Decision Engine | Severity classification + trading signal, regime- and momentum-aware |
+| 6 | Decision Engine | Severity classification + risk signal, regime- and momentum-aware |
 | 7 | Explainability + Sentiment | SHAP drivers + VADER + Groq LLM contextual scoring + LLM narrative |
 | 8 | Reporting + Dashboard | Streamlit dashboard + audit log + daily management summary |
 
@@ -127,20 +111,6 @@ Valuation gates: blocks **FAVORABLE** on negative or extreme P/E (> 50); strengt
 
 ---
 
-## Backtesting Results
-
-Walk-forward setup — no lookahead bias. 4-year rolling train window, 6-month test windows.
-
-| Signal | Avg 20d Return | Drawdown Rate |
-|--------|----------------|---------------|
-| FAVORABLE | +3.37%    | 17%           |
-| MONITOR   | +2.94%    | 26%           |
-| ELEVATED  | +3.79%    | 36%           |
-
-Risk ordering is correct: `ELEVATED` signals carry the highest drawdown rate, `FAVORABLE` the lowest. The system correctly identifies which situations are most dangerous.
-
----
-
 ## Key Design Decisions
 
 **Why an ensemble of 4 anomaly detectors?**  
@@ -157,12 +127,63 @@ SHAP tells you *which features* drove the model decision. The LLM (Groq / `llama
 
 ---
 
+## Backtesting Results
+
+Walk-forward setup — no lookahead bias. 4-year rolling train window, 6-month test windows. 683 decisions across 11 walk-forward windows.
+
+| Signal | n | Avg 20d Return | Drawdown Rate |
+|--------|---|----------------|---------------|
+| FAVORABLE | 2 | +2.96% | 0.0% |
+| MONITOR | 190 | +2.56% | 32.1% |
+| NEUTRAL | 62 | +3.49% | 21.0% |
+| ELEVATED | 429 | +4.90% | 44.3% |
+
+**Overall detection** (CRITICAL + WARNING vs. no-event): Precision 41.4%, Recall 92.4%, F1 0.571. The system is deliberately tuned for high recall — in risk early-warning, a missed drawdown is costlier than a false alarm.
+
+> **FAVORABLE fires rarely** (n=2 in this window) — the engine is conservative about positive signals. **ELEVATED shows the highest average return** because it flags high-beta names that move sharply in both directions; the system optimizes for drawdown risk (44.3% drawdown rate, the highest), not for return. Risk ordering is correct: ELEVATED carries the highest drawdown rate, the key measure of what this system is designed to identify.
+
+### Baseline Comparison — does the ML stack beat trivial heuristics?
+
+Same 683 decisions, same 11 walk-forward windows, same target. AUC measures ranking quality (threshold-free); Precision/Recall/F1 for baselines are at the base-rate flag rate (38.7%); FinWatch uses its actual CRITICAL+WARNING flag.
+
+| Method | AUC | Precision | Recall | F1 | Flag Rate |
+|--------|-----|-----------|--------|----|-----------|
+| LogReg (vol + momentum) | 0.621 | 0.496 | 0.496 | 0.496 | 38.7% |
+| Volatility (60d realized) | 0.604 | 0.489 | 0.489 | 0.489 | 38.7% |
+| **FinWatch (full ML stack)** | **0.597** | **0.414** | **0.924** | **0.571** | **86.4%** |
+| Momentum (neg 5d + MA50) | 0.540 | 0.432 | 0.432 | 0.432 | 38.7% |
+| RSI (overbought proxy) | 0.525 | 0.420 | 0.420 | 0.420 | 38.7% |
+
+On pure ranking (AUC), a simple logistic regression on volatility + momentum (0.621) matches or slightly beats the full ML stack (0.597). This is expected: drawdown prediction from daily OHLCV is a hard problem, and a volatility signal is a strong challenger.
+
+The ML system's value is not in ranking — it is at the production operating point. FinWatch flags 86% of rows as CRITICAL/WARNING (high coverage by design), which lowers AUC but catches 92.4% of real drawdowns — far more than any baseline at a comparable flag rate. It wins on F1 (+0.075 over the best baseline) and adds momentum-aware signal composition (recovery gating) that a static heuristic cannot replicate.
+
+**Honest conclusion:** FinWatch is a high-recall risk-triage layer, not a ranking model. A naive volatility heuristic is a competitive ranker; the system's edge is recall, signal composition, and explainability — not raw discrimination.
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Data ingestion | Twelve Data API (OHLCV), yfinance (fundamentals), Finnhub (news + analyst ratings) |
+| Storage | Parquet (per-ticker), structured `data/` layout |
+| Feature engineering | pandas, numpy — 30+ features per ticker |
+| Anomaly detection | LSTM Autoencoder (Keras), Isolation Forest (scikit-learn), Z-Score |
+| Prediction | XGBoost, LightGBM, Logistic Regression meta-model stacking |
+| Explainability | SHAP (TreeExplainer), VADER, Groq LLM contextual scoring (`llama-3.3-70b-versatile`) |
+| AI Analyst | Groq SDK direct tool-call loop — `llama-3.3-70b-versatile`, 11 tools |
+| Dashboard | Streamlit, 4-screen dark-theme UI, EN/DE language toggle |
+| Language | Python 3.11 |
+
+---
+
 ## Dashboard
 
 Four-screen Streamlit app (dark theme, custom CSS, EN/DE language toggle):
 
 ### Command Center
-![FinWatch AI — Stock Deep-Dive](docs/screenshot-deep-dive.png)
+![FinWatch AI — Command Center](docs/screenshot-command-center.png)
 
 Landing screen. Shows portfolio-wide state at a glance:
 - **Regime banner** — S&P 500 market regime (Bull/Bear/Neutral) + volatility regime (Low/Moderate/High), derived from MA200 and VIX
@@ -171,12 +192,15 @@ Landing screen. Shows portfolio-wide state at a glance:
 - **Sector severity bar** — stacked horizontal bar showing CRITICAL/WARNING/WATCH/NORMAL counts per sector
 
 ### Stock Deep-Dive
+![FinWatch AI — Stock Deep-Dive](docs/screenshot-deep-dive.png)
+
 Per-stock analysis view:
+- Latest news — recent headlines for the selected stock (Finnhub), shown above the anomaly profile
 - Price chart with MA50, MA200, and anomaly markers
 - Metric cards: VaR 95%, Expected Shortfall, P(Drawdown), Model Confidence
 - SHAP feature importance bar chart (human-readable labels)
 - Anomaly radar chart (volume / volatility / price / context scores)
-- LLM narrative: plain-English explanation of the anomaly and signal rationale
+- LLM narrative: plain-English explanation of the anomaly and risk signal rationale
 - **AI Analyst chat panel** (right column) — ask questions about the selected stock
 
 ### AI Analyst
@@ -190,7 +214,7 @@ The AI Analyst is embedded as a chat panel in the Deep-Dive and Command Center s
 
 | Tool | What it returns |
 |------|----------------|
-| `get_stock_analysis` | Severity, signal, drawdown probability, anomaly type, confidence |
+| `get_stock_analysis` | Severity, risk signal, drawdown probability, anomaly type, confidence |
 | `get_risk_metrics` | VaR 95%, ES 95%, ES ratio, max drawdown 30d |
 | `explain_anomaly` | SHAP drivers, anomaly group scores, narrative text |
 | `get_market_context` | Regime, vol regime, market-wide flag, context summary |
@@ -251,7 +275,7 @@ python src/backtesting/backtest.py                     # Walk-forward backtest +
 python src/data/analyst_ratings.py
 ```
 
-Pulls Finnhub recommendation trends (Strong Buy / Buy / Hold / Sell) for all monitored tickers and saves to `data/analyst_ratings.parquet`.
+Pulls external analyst consensus data from Finnhub (Strong Buy / Buy / Hold / Sell recommendation trends) for all monitored tickers and saves to `data/analyst_ratings.parquet`. These are third-party analyst opinions — not FinWatch risk signals.
 
 ### 5. Daily pipeline
 
@@ -272,11 +296,11 @@ streamlit run finwatch/app.py
 | Source | What it provides |
 |--------|-----------------|
 | Twelve Data API | Daily OHLCV — 10 years historical + incremental daily updates |
-| Finnhub | News headlines — last 7 days per ticker; analyst recommendation trends |
+| Finnhub | News headlines — last 7 days per ticker; external analyst recommendation trends (Strong Buy / Buy / Hold / Sell) |
 | yfinance | Fundamentals — P/E, P/B, revenue growth, insider activity, options flow |
 | FRED (via pandas-datareader) | VIX index — used as macro regime signal |
 
-**Universe:** 58 stocks across 13 sectors + 11 sector ETFs + S&P 500 reference index (via SPY proxy — see note below).
+**Universe:** 58 stocks across 13 sectors + 13 sector ETFs + S&P 500 reference index (via SPY proxy — see note below).
 
 ### Twelve Data — Rate Limits and Caching
 
