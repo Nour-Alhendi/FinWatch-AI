@@ -19,6 +19,7 @@ from analytics.analysis import (
     build_analysis, build_investor_summary, explain_anomaly,
 )
 from llm.translator import translate
+from ui.theme import CHART_AXIS, COLOR_NEUTRAL
 
 
 def _safe_list(val):
@@ -86,7 +87,7 @@ def show_analysis_modal(ticker: str, name: str, det_df, news_df, lang: str) -> N
 
     if news_df is None or ticker not in news_df["ticker"].values:
         st.markdown(
-            '<div style="font-size:11px;color:#5c7080;font-family:IBM Plex Mono">'
+            '<div style="font-size:11px;color:#7a9ab0;font-family:IBM Plex Mono">'
             'No LLM report available for this ticker.</div>',
             unsafe_allow_html=True,
         )
@@ -94,7 +95,7 @@ def show_analysis_modal(ticker: str, name: str, det_df, news_df, lang: str) -> N
     llm_text = news_df[news_df["ticker"] == ticker].iloc[0].get("llm_summary", "")
     if not llm_text or len(llm_text) < 120:
         st.markdown(
-            '<div style="font-size:11px;color:#5c7080;font-family:IBM Plex Mono">'
+            '<div style="font-size:11px;color:#7a9ab0;font-family:IBM Plex Mono">'
             'LLM report not generated yet. Run the narrator pipeline first.</div>',
             unsafe_allow_html=True,
         )
@@ -440,7 +441,7 @@ def render_risk_news_row(ticker: str, row, det_df, decisions, news_df) -> None:
             "ENTRY":   ("#1de9b6", "rgba(29,233,182,0.12)", "rgba(29,233,182,0.35)", "▲ ENTRY"),
             "EXIT":    ("#f85149", "rgba(248,81,73,0.12)",  "rgba(248,81,73,0.35)",  "▼ EXIT"),
             "HOLD":    ("#58a6ff", "rgba(88,166,255,0.10)", "rgba(88,166,255,0.30)", "◆ HOLD"),
-            "NEUTRAL": ("#637a91", "rgba(30,45,65,0.4)",    "rgba(30,45,65,0.6)",   "— NEUTRAL"),
+            "NEUTRAL": (COLOR_NEUTRAL, "rgba(30,45,65,0.4)",    "rgba(30,45,65,0.6)",   "— NEUTRAL"),
         }
         sig_c, sig_bg, sig_border, sig_label = _sig_cfg.get(trading_signal, _sig_cfg["NEUTRAL"])
         signal_html = f"""
@@ -468,7 +469,7 @@ def render_risk_news_row(ticker: str, row, det_df, decisions, news_df) -> None:
         <div class="rp-section">
           <div class="rp-title">AI Risk Analysis</div>
           <div class="sev-big {sev_cls}">{sev.replace('_',' ')}</div>
-          <div style="font-size:9px;color:#5c7080;margin-bottom:4px;font-family:IBM Plex Mono">{row.get('action','—')} · {row.get('date','—')}</div>
+          <div style="font-size:9px;color:#7a9ab0;margin-bottom:4px;font-family:IBM Plex Mono">{row.get('action','—')} · {row.get('date','—')}</div>
           {anom_row_html}
           {dd_prob_html}
           <div class="rp-row"><span class="rp-key">Drawdown 30D</span>{dd_html}</div>
@@ -504,7 +505,7 @@ def render_risk_news_row(ticker: str, row, det_df, decisions, news_df) -> None:
                     if source.startswith("http"):
                         source = urllib.parse.urlparse(source).netloc.replace("www.", "") or ""
                     source_html = (
-                        f'<span style="font-size:9px;color:#5c7080;font-family:IBM Plex Mono;'
+                        f'<span style="font-size:9px;color:#7a9ab0;font-family:IBM Plex Mono;'
                         f'display:inline-block;margin-top:3px">Source: {source}</span>'
                     ) if source else ""
                     news_html += (
@@ -627,7 +628,7 @@ def render_candle_panel(det_df, clicked_date: str) -> None:
         return (
             '<div style="display:flex;flex-direction:column;align-items:center;'
             'padding:0 12px;border-right:1px solid #1a2332">'
-            f'<span style="font-size:10px;color:#5c7080;font-family:IBM Plex Mono;'
+            f'<span style="font-size:10px;color:#7a9ab0;font-family:IBM Plex Mono;'
             f'letter-spacing:1px;margin-bottom:2px;cursor:help"{tip_attr}>{label}</span>'
             f'<span style="font-size:12px;color:{color};font-family:IBM Plex Mono;'
             f'font-weight:500">{value}</span>'
@@ -665,7 +666,7 @@ def render_candle_panel(det_df, clicked_date: str) -> None:
         cells += (
             '<div style="display:flex;flex-direction:column;align-items:center;'
             'padding:0 12px;border-right:1px solid #1a2332">'
-            f'<span style="font-size:8px;color:#5c7080;font-family:IBM Plex Mono;'
+            f'<span style="font-size:8px;color:#7a9ab0;font-family:IBM Plex Mono;'
             f'letter-spacing:1px;margin-bottom:2px;cursor:help" data-tip="{tip}">ANOMALY</span>'
             f'<span style="font-size:10px;color:#e3b341;font-family:IBM Plex Mono">{anom_txt}</span>'
             '</div>'
@@ -718,7 +719,7 @@ def render_strategy_box(det_df, dec_row) -> None:
         "ENTRY":   ("#1de9b6", "rgba(29,233,182,0.10)", "rgba(29,233,182,0.30)", "▲ ENTRY"),
         "EXIT":    ("#f85149", "rgba(248,81,73,0.10)",  "rgba(248,81,73,0.30)",  "▼ EXIT"),
         "HOLD":    ("#58a6ff", "rgba(88,166,255,0.08)", "rgba(88,166,255,0.25)", "◆ HOLD"),
-        "NEUTRAL": ("#637a91", "rgba(30,45,65,0.3)",    "rgba(30,45,65,0.5)",   "— NEUTRAL"),
+        "NEUTRAL": (COLOR_NEUTRAL, "rgba(30,45,65,0.3)",    "rgba(30,45,65,0.5)",   "— NEUTRAL"),
     }
     sig_c, sig_bg, sig_border, sig_label = _sig_cfg.get(trading_signal, _sig_cfg["NEUTRAL"])
 

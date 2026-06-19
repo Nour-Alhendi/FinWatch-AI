@@ -9,6 +9,8 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 
+from ui.theme import CHART_AXIS
+
 
 _RS_BUTTONS = [
     dict(count=1,  label="1M", step="month", stepmode="backward"),
@@ -46,7 +48,7 @@ def render_price_chart(det_df: pd.DataFrame, ticker: str, period: str = "1M", cl
     if det_df is None or "Close" not in det_df.columns:
         st.markdown(
             '<div style="height:300px;display:flex;align-items:center;'
-            'justify-content:center;color:#5c7080;font-size:12px;'
+            'justify-content:center;color:#7a9ab0;font-size:12px;'
             'font-family:IBM Plex Mono">No price data</div>',
             unsafe_allow_html=True,
         )
@@ -67,7 +69,7 @@ def render_price_chart(det_df: pd.DataFrame, ticker: str, period: str = "1M", cl
         ema20   = ema20_all
 
     if len(plot_df) == 0:
-        st.markdown('<div style="color:#5c7080;font-size:11px;font-family:IBM Plex Mono">No data for selected period</div>', unsafe_allow_html=True)
+        st.markdown('<div style="color:#7a9ab0;font-size:11px;font-family:IBM Plex Mono">No data for selected period</div>', unsafe_allow_html=True)
         return
 
     has_ohlc   = all(c in plot_df.columns for c in ["Open", "High", "Low"])
@@ -168,12 +170,12 @@ def render_price_chart(det_df: pd.DataFrame, ticker: str, period: str = "1M", cl
 
     fig.add_annotation(x=1.01, xref="paper", y=close_last, yref="y",
                        text=f"${close_last:.2f}",
-                       xanchor="left", showarrow=False,
+                       xanchor="left", xshift=8, showarrow=False,
                        font=dict(size=9, color="#1de9b6", family="IBM Plex Mono"),
                        yshift=close_yshift)
     fig.add_annotation(x=1.01, xref="paper", y=ema20_last, yref="y",
                        text=f"EMA20 ${ema20_last:.2f}",
-                       xanchor="left", showarrow=False,
+                       xanchor="left", xshift=8, showarrow=False,
                        font=dict(size=9, color="#a371f7", family="IBM Plex Mono"),
                        yshift=ema20_yshift)
 
@@ -190,15 +192,17 @@ def render_price_chart(det_df: pd.DataFrame, ticker: str, period: str = "1M", cl
     fig.update_layout(
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#080d14",
         xaxis=dict(
-            showgrid=True, gridcolor="#111b27", color="#5c7080",
-            tickfont=dict(size=10, family="IBM Plex Mono"),
+            showgrid=True, gridcolor="rgba(255,255,255,0.08)",
+            zerolinecolor="rgba(255,255,255,0.14)", linecolor="rgba(255,255,255,0.14)",
+            color=CHART_AXIS, tickfont=dict(size=10, family="IBM Plex Mono"),
             tickformatstops=_TICKFORMATSTOPS,
         ),
-        yaxis=dict(showgrid=True, gridcolor="#111b27", color="#5c7080",
-                   tickfont=dict(size=10, family="IBM Plex Mono"), tickprefix="$",
-                   side="right", range=[y_lo, y_hi]),
+        yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.08)",
+                   zerolinecolor="rgba(255,255,255,0.14)", linecolor="rgba(255,255,255,0.14)",
+                   color=CHART_AXIS, tickfont=dict(size=10, family="IBM Plex Mono"),
+                   tickprefix="$", side="right", range=[y_lo, y_hi]),
         hoverlabel=_HOVERLABEL,
-        margin=dict(t=30, b=10, l=10, r=90), height=400,
+        margin=dict(t=30, b=10, l=10, r=105), height=400,
         showlegend=False, hovermode=False,
         clickmode="event+select",
     )
@@ -253,22 +257,22 @@ def render_rsi_chart(det_df: pd.DataFrame, period: str = "1M") -> None:
 
     fig2.add_annotation(x=1.01, xref="paper", y=rsi_last, yref="y",
                         text=f"<b>RSI {rsi_last:.1f}</b>",
-                        xanchor="left", showarrow=False,
+                        xanchor="left", xshift=8, showarrow=False,
                         font=dict(size=8, color="#e3b341", family="IBM Plex Mono"),
                         yshift=rsi_yshift)
     fig2.add_annotation(x=1.01, xref="paper", y=rsima_last, yref="y",
                         text=f"MA {rsima_last:.1f}",
-                        xanchor="left", showarrow=False,
+                        xanchor="left", xshift=8, showarrow=False,
                         font=dict(size=8, color="#58a6ff", family="IBM Plex Mono"),
                         yshift=rsima_yshift)
 
     fig2.update_layout(
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#080d14",
-        xaxis=dict(showgrid=False, color="#5c7080",
+        xaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.08)", color=CHART_AXIS,
                    tickfont=dict(size=9, family="IBM Plex Mono")),
-        yaxis=dict(showgrid=False, color="#5c7080",
+        yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.08)", color=CHART_AXIS,
                    tickfont=dict(size=9, family="IBM Plex Mono"), range=[0, 100]),
-        margin=dict(t=5, b=5, l=10, r=70), height=130,
+        margin=dict(t=5, b=5, l=10, r=85), height=130,
         showlegend=False, hovermode="x unified",
     )
     st.plotly_chart(fig2, use_container_width=True, config={"displayModeBar": False})
@@ -279,7 +283,7 @@ def render_spx_chart(spx_df: pd.DataFrame, period: str = "1M") -> None:
     if spx_df is None:
         st.markdown(
             '<div style="height:300px;display:flex;align-items:center;'
-            'justify-content:center;color:#5c7080;font-size:12px;'
+            'justify-content:center;color:#7a9ab0;font-size:12px;'
             'font-family:IBM Plex Mono">No SPX data available</div>',
             unsafe_allow_html=True,
         )
@@ -327,11 +331,11 @@ def render_spx_chart(spx_df: pd.DataFrame, period: str = "1M") -> None:
     fig.update_layout(
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="#080d14",
         xaxis=dict(
-            showgrid=True, gridcolor="#111b27", color="#5c7080",
+            showgrid=True, gridcolor="#1c2f42", color=CHART_AXIS,
             tickfont=dict(size=10, family="IBM Plex Mono"),
             tickformatstops=_TICKFORMATSTOPS,
         ),
-        yaxis=dict(showgrid=True, gridcolor="#111b27", color="#5c7080",
+        yaxis=dict(showgrid=True, gridcolor="#1c2f42", color=CHART_AXIS,
                    tickfont=dict(size=10, family="IBM Plex Mono"),
                    range=[y_lo, y_hi]),
         hoverlabel=_HOVERLABEL,

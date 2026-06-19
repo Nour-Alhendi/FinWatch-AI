@@ -6,13 +6,14 @@ import streamlit as st
 import pandas as pd
 
 from data.loader import (
-    COMPANY_NAMES, SEV_COLOR, load_decisions, load_price_summary, load_detection,
+    COMPANY_NAMES, SEV_COLOR, SIGNAL_DISPLAY, load_decisions, load_price_summary, load_detection,
 )
 from data.portfolio import (
     load_portfolios, save_portfolios,
     add_position, remove_position,
     create_portfolio, delete_portfolio,
 )
+from ui.theme import TEXT_MUTED, COLOR_NEUTRAL
 
 ALL_TICKERS = list(COMPANY_NAMES.keys())
 
@@ -25,47 +26,48 @@ CSS = """
 <style>
 /* ── KPI cards ── */
 .pf-kpi-label {
-    font-size:8px;letter-spacing:2.5px;text-transform:uppercase;
-    color:#3d5266;font-family:'IBM Plex Mono',monospace;margin-bottom:4px;
+    font-size:11px;letter-spacing:0.12em;text-transform:uppercase;
+    color:#4a4a5a;font-family:'IBM Plex Mono',monospace;margin-bottom:4px;font-weight:500;
 }
 .pf-kpi-value {
-    font-size:22px;font-weight:600;font-family:'IBM Plex Mono',monospace;color:#e2e8f0;
+    font-size:20px;font-weight:500;font-family:'IBM Plex Mono',monospace;color:#f0f0f5;
 }
-.pf-kpi-sub { font-size:10px;font-family:'IBM Plex Mono',monospace;color:#637a91;margin-top:2px; }
-.pf-up   { color:#1de9b6!important; }
-.pf-down { color:#f85149!important; }
+.pf-kpi-sub { font-size:12px;font-family:'IBM Plex Mono',monospace;color:#8b8b9e;margin-top:2px; }
+.pf-up   { color:#00c4b4!important; }
+.pf-down { color:#e05252!important; }
 
 /* ── Stock list rows ── */
 .pos-stat-label {
-    font-size:8px;letter-spacing:2px;text-transform:uppercase;
-    color:#3d5266;font-family:'IBM Plex Mono',monospace;
+    font-size:11px;letter-spacing:0.10em;text-transform:uppercase;
+    color:#4a4a5a;font-family:'IBM Plex Mono',monospace;font-weight:500;
 }
 .pos-stat-val {
-    font-size:12px;font-weight:500;font-family:'IBM Plex Mono',monospace;color:#c9d1d9;
+    font-size:13px;font-weight:400;font-family:'IBM Plex Mono',monospace;color:#f0f0f5;
 }
 
 /* ── Section labels ── */
 .section-lbl {
-    font-size:8px;letter-spacing:2.5px;text-transform:uppercase;
-    color:#3d5266;font-family:'IBM Plex Mono',monospace;
-    border-bottom:1px solid rgba(30,45,65,0.4);padding-bottom:5px;margin-bottom:12px;
+    font-size:11px;letter-spacing:0.12em;text-transform:uppercase;
+    color:#4a4a5a;font-family:'IBM Plex Mono',monospace;font-weight:500;
+    border-bottom:1px solid rgba(255,255,255,0.14);padding-bottom:5px;margin-bottom:12px;
 }
 
 /* ── Strategy modal ── */
 .s-section-head {
-    font-size:7px;letter-spacing:2.5px;text-transform:uppercase;
-    color:#3d5266;border-bottom:1px solid rgba(30,45,65,0.4);
+    font-size:11px;letter-spacing:0.12em;text-transform:uppercase;
+    color:#4a4a5a;border-bottom:1px solid rgba(255,255,255,0.14);
     padding-bottom:4px;margin:12px 0 8px;
-    font-family:'IBM Plex Mono',monospace;
+    font-family:'IBM Plex Mono',monospace;font-weight:500;
 }
 .strategy-row {
-    display:flex;gap:10px;padding:4px 0;font-size:10px;
-    font-family:'IBM Plex Mono',monospace;line-height:1.7;
+    display:flex;gap:10px;padding:4px 0;font-size:13px;
+    font-family:'IBM Plex Mono',monospace;line-height:1.7;color:#8b8b9e;
 }
-.s-arrow-up { color:#1de9b6;font-weight:700;white-space:nowrap;min-width:100px; }
-.s-arrow-dn { color:#f85149;font-weight:700;white-space:nowrap;min-width:100px; }
+.s-arrow-up { color:#00c4b4;font-weight:500;white-space:nowrap;min-width:110px; }
+.s-arrow-dn { color:#e05252;font-weight:500;white-space:nowrap;min-width:110px; }
 </style>
 """
+CSS = CSS.replace("#4a4a5a", TEXT_MUTED)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -220,13 +222,13 @@ def _render_stock_modal_ui(pos: dict, dec: dict, current_price: float, chg: floa
     ticker  = pos["ticker"]
     name    = COMPANY_NAMES.get(ticker, ticker)
     sev     = dec.get("severity", "NORMAL")
-    sev_col = SEV_COLOR.get(sev, "#637a91")
+    sev_col = SEV_COLOR.get(sev, COLOR_NEUTRAL)
     ts      = str(dec.get("trading_signal", "NEUTRAL"))
     ts_cfg  = {
         "ENTRY":   ("#1de9b6", "▲ ENTRY"),
         "EXIT":    ("#f85149", "▼ EXIT"),
         "HOLD":    ("#58a6ff", "◆ HOLD"),
-        "NEUTRAL": ("#637a91", "— NEUTRAL"),
+        "NEUTRAL": (COLOR_NEUTRAL, "— NEUTRAL"),
     }
     ts_col, ts_lbl = ts_cfg.get(ts, ts_cfg["NEUTRAL"])
     chg_col  = "#1de9b6" if chg >= 0 else "#f85149"
@@ -382,28 +384,28 @@ def _build_strategy(pos: dict, decision: dict, current_price: float) -> str:  # 
 
     if sev == "CRITICAL":
         conv_pct   = min(int(p_drawdown_cv * 100) + 10, 95)
-        conv_color = "#f85149"
-        conv_label = "EXIT — Critical risk detected"
+        conv_color = "#cc5b54"
+        conv_label = "ELEVATED — Critical risk detected"
         conv_icon  = "↓"
     elif sev == "WARNING":
         conv_pct   = min(int(p_drawdown_cv * 100), 85)
-        conv_color = "#e3b341"
-        conv_label = "CAUTION — Elevated downside risk"
+        conv_color = "#cba23f"
+        conv_label = "ELEVATED — Elevated downside risk"
         conv_icon  = "→"
     elif sev == "POSITIVE_MOMENTUM":
         conv_pct   = 65
-        conv_color = "#1de9b6"
-        conv_label = "HOLD / ADD — Positive momentum"
+        conv_color = "#5a9e6a"
+        conv_label = "FAVORABLE — Positive momentum"
         conv_icon  = "↑"
     elif sev == "WATCH":
         conv_pct   = max(int(p_drawdown_cv * 100), 40)
-        conv_color = "#58a6ff"
-        conv_label = "WATCH — Slightly elevated risk"
+        conv_color = "#5b87c4"
+        conv_label = "MONITOR — Slightly elevated risk"
         conv_icon  = "→"
     else:
         conv_pct   = 50
-        conv_color = "#637a91"
-        conv_label = "HOLD — No strong signal"
+        conv_color = COLOR_NEUTRAL
+        conv_label = "MONITOR — No strong signal"
         conv_icon  = "→"
 
     reasons = []
@@ -456,7 +458,7 @@ def _build_strategy(pos: dict, decision: dict, current_price: float) -> str:  # 
     {conv_icon} <span style="font-size:16px">{conv_pct}%</span> conviction &mdash; {conv_label}
   </div>
   <div style="font-size:10px;color:#8b9aab;line-height:2">
-    <strong style="color:#637a91;letter-spacing:1px;font-size:8px">WHY?</strong><br>
+    <strong style="color:{COLOR_NEUTRAL};letter-spacing:1px;font-size:8px">WHY?</strong><br>
     {"<br>".join(f"· {r}" for r in reasons)}
   </div>
 </div>""")
@@ -491,8 +493,8 @@ def _build_strategy(pos: dict, decision: dict, current_price: float) -> str:  # 
                      f"Sell {tp_shares} shares near {_fmt_usd(exit_target)} to lock in profits.")
     else:
         pnl_sign  = "+" if pnl_total >= 0 else ""
-        rec_color = "#637a91"
-        rec_label = "→  HOLD"
+        rec_color = COLOR_NEUTRAL
+        rec_label = "→  MONITOR"
         rec_body  = (f"No strong exit signal. P&L: {pnl_sign}{_fmt_usd(pnl_total)} ({pnl_pct:+.1f}%). "
                      f"Drawdown prob: {p_drawdown_cv*100:.0f}%. Watch {_fmt_usd(entry)} as key support.")
 
@@ -559,7 +561,7 @@ def _build_strategy(pos: dict, decision: dict, current_price: float) -> str:  # 
         elif news_sentiment <= -0.05:
             tone, tone_color = "moderately negative", "#e3b341"
         else:
-            tone, tone_color = "neutral", "#637a91"
+            tone, tone_color = "neutral", COLOR_NEUTRAL
 
         pnl_exposure = abs(pnl_total)
         risk_ctx     = decision.get("context", "")
@@ -579,7 +581,7 @@ def _build_strategy(pos: dict, decision: dict, current_price: float) -> str:  # 
         elif rsi >= 70:
             rsi_text, rsi_color = f"RSI at {rsi:.0f} — overbought, correction risk", "#f85149"
         else:
-            rsi_text, rsi_color = f"RSI at {rsi:.0f} — neutral momentum", "#637a91"
+            rsi_text, rsi_color = f"RSI at {rsi:.0f} — neutral momentum", COLOR_NEUTRAL
 
         if mom5 > 0.03 and mom10 > 0.03:
             mom_text, mom_color = f"Short and medium-term momentum both positive (+{mom5*100:.1f}% / +{mom10*100:.1f}%) — sustained uptrend", "#1de9b6"
@@ -590,28 +592,28 @@ def _build_strategy(pos: dict, decision: dict, current_price: float) -> str:  # 
         elif mom5 < -0.01 and mom10 > 0.01:
             mom_text, mom_color = f"Short-term pullback ({mom5*100:.1f}%) within positive medium-term trend (+{mom10*100:.1f}%) — potential entry", "#58a6ff"
         else:
-            mom_text, mom_color = f"Momentum flat (5d: {mom5*100:.1f}%, 10d: {mom10*100:.1f}%)", "#637a91"
+            mom_text, mom_color = f"Momentum flat (5d: {mom5*100:.1f}%, 10d: {mom10*100:.1f}%)", COLOR_NEUTRAL
 
         if obv > 0.5:    obv_text, obv_color = "Strong buying pressure — institutional accumulation likely", "#1de9b6"
         elif obv < -0.5: obv_text, obv_color = "Selling pressure confirmed — distribution phase, volume-backed decline", "#f85149"
         elif obv > 0.1:  obv_text, obv_color = "Mild buying pressure — volume supports price action", "#58a6ff"
         elif obv < -0.1: obv_text, obv_color = "Mild selling pressure — watch for volume acceleration", "#e3b341"
-        else:            obv_text, obv_color = "Neutral volume pressure", "#637a91"
+        else:            obv_text, obv_color = "Neutral volume pressure", COLOR_NEUTRAL
 
         dd_pct = drawdown * 100
         ex_pct = excess * 100
         if drawdown < -0.15:   dd_text, dd_color = f"Severe 30D drawdown of {dd_pct:.1f}% — significant peak-to-trough loss", "#f85149"
         elif drawdown < -0.08: dd_text, dd_color = f"Elevated drawdown of {dd_pct:.1f}% over 30 days", "#e3b341"
-        else:                  dd_text, dd_color = f"Contained drawdown of {dd_pct:.1f}%", "#637a91"
+        else:                  dd_text, dd_color = f"Contained drawdown of {dd_pct:.1f}%", COLOR_NEUTRAL
 
         if ex_pct < -5:   vs_market, vm_color = f"Underperforming market by {abs(ex_pct):.1f}% — idiosyncratic weakness", "#f85149"
         elif ex_pct > 5:  vs_market, vm_color = f"Outperforming market by +{ex_pct:.1f}% — alpha generation", "#1de9b6"
-        else:             vs_market, vm_color = f"Tracking market closely (excess return: {ex_pct:+.1f}%)", "#637a91"
+        else:             vs_market, vm_color = f"Tracking market closely (excess return: {ex_pct:+.1f}%)", COLOR_NEUTRAL
 
         if anom_sc >= 3:   anom_text, anom_color = f"Strong anomaly signal — {anom_sc}/4 detection models flagged unusual activity", "#f85149"
         elif anom_sc >= 2: anom_text, anom_color = f"Moderate anomaly — {anom_sc}/4 models detected unusual behavior", "#e3b341"
         elif anom_sc == 1: anom_text, anom_color = "Weak anomaly signal — 1/4 model flagged, worth monitoring", "#58a6ff"
-        else:              anom_text, anom_color = "No anomaly detected — price behavior within historical norms", "#637a91"
+        else:              anom_text, anom_color = "No anomaly detected — price behavior within historical norms", COLOR_NEUTRAL
 
         scope_parts = []
         if mkt_an: scope_parts.append("market-wide")
@@ -767,13 +769,19 @@ def render_portfolio_page():
                     pnl_pct_e= e["pnl_pct"]
                     value_e  = e["value"]
                     weight   = (value_e / total_value * 100) if total_value > 0 else 0
-                    sev_col  = SEV_COLOR.get(sev, "#637a91")
+                    sev_col  = SEV_COLOR.get(sev, COLOR_NEUTRAL)
                     pnl_col_e= "#1de9b6" if pnl_e >= 0 else "#f85149"
                     chg_col  = "#1de9b6" if chg >= 0 else "#f85149"
                     chg_sign = "+" if chg >= 0 else ""
                     ts       = str(dec.get("trading_signal", "NEUTRAL"))
-                    ts_cfg   = {"ENTRY":("#1de9b6","▲"),"EXIT":("#f85149","▼"),"HOLD":("#58a6ff","◆"),"NEUTRAL":("#637a91","—")}
+                    ts_cfg   = {
+                        "ENTRY":("#4a9e6a","▲"), "BUY_SIGNAL":("#4a9e6a","▲"),
+                        "EXIT":("#e05252","▼"),  "REDUCE":("#e05252","▼"),
+                        "HOLD":("#c49a3c","◆"),  "WATCH":("#c49a3c","◆"),
+                        "NEUTRAL":(COLOR_NEUTRAL,"—"),
+                    }
                     ts_col, ts_ico = ts_cfg.get(ts, ts_cfg["NEUTRAL"])
+                    ts_label = SIGNAL_DISPLAY.get(ts, ts)
 
                     r1, r2, r3, r4, r5, r6, r_det, r_rm = st.columns(
                         [1.6, 2.8, 1.5, 1.6, 1.6, 1.3, 1.1, 0.5], gap="small"
@@ -830,7 +838,7 @@ def render_portfolio_page():
                             f'<div style="padding:6px 0">'
                             f'<div class="pos-stat-label">Signal</div>'
                             f'<div style="font-size:12px;font-weight:700;color:{ts_col};'
-                            f'font-family:IBM Plex Mono,monospace">{ts_ico} {ts}</div></div>',
+                            f'font-family:IBM Plex Mono,monospace">{ts_ico} {ts_label}</div></div>',
                             unsafe_allow_html=True,
                         )
                     with r_det:
@@ -874,7 +882,7 @@ def render_portfolio_page():
                 f1, f2 = st.columns([3, 2], gap="small")
                 with f1:
                     t_sel = st.selectbox("Ticker", ALL_TICKERS,
-                                         format_func=lambda t: f"{t} — {COMPANY_NAMES.get(t,'')}",
+                                         format_func=lambda t: f"{COMPANY_NAMES.get(t, t)} ({t})",
                                          label_visibility="collapsed", key=f"form_ticker_{pf_name}")
                 with f2:
                     n_shares = st.number_input("Shares", min_value=0.01, value=10.0, step=1.0,
@@ -895,3 +903,14 @@ def render_portfolio_page():
                     st.session_state.portfolios = portfolios
                     st.session_state[add_key]   = False
                     st.rerun()
+
+    # ── Empty-state footer ────────────────────────────────────────────────────
+    st.markdown(
+        '<div style="margin-top:24px;padding:16px 0;'
+        'border-top:1px solid rgba(255,255,255,0.14);'
+        f'font-family:Inter,sans-serif;font-size:13px;color:{TEXT_MUTED}">'
+        'Click <strong style="color:#8b8b9e">＋ New Portfolio</strong> to add another portfolio, '
+        'or <strong style="color:#8b8b9e">＋ Add Position</strong> inside a portfolio to track more stocks.'
+        '</div>',
+        unsafe_allow_html=True,
+    )
