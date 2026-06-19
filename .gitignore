@@ -7,7 +7,14 @@ __pycache__/
 *.pyc
 
 # Data files
-data/
+data/*
+!data/decisions/
+!data/detection/
+!data/explanations/
+!data/macro_context.parquet
+!data/earnings_calendar.parquet
+!data/correlation_risk.parquet
+!data/correlation_matrix.parquet
 
 # macOS
 .DS_Store
