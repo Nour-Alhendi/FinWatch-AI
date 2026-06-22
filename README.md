@@ -183,11 +183,9 @@ The ML system's value is not in ranking — it is at the production operating po
 ---
 
 ## Dashboard
-
 Four-screen Streamlit app (dark theme, custom CSS, EN/DE language toggle):
 
 ### Command Center
-![FinWatch AI — Command Center](docs/screenshot-command-center.png)
 
 Landing screen. Shows portfolio-wide state at a glance:
 - **Regime banner** — S&P 500 market regime (Bull/Bear/Neutral) + volatility regime (Low/Moderate/High), derived from MA200 and VIX
