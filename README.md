@@ -52,7 +52,11 @@ The dashboard displays three risk-level signals:
 
 ## ML Architecture
 
+![FinWatch AI — system architecture](docs/architecture-overview.png)
+
 The system runs an **8-layer modular pipeline**:
+
+![8-layer pipeline](docs/architecture-pipeline.png)
 
 | Layer | Name | What it does |
 |-------|------|-------------|
