@@ -1,6 +1,6 @@
 # FinWatch AI — Project State Document
 
-> Last updated: 2026-03-29
+> Last updated: 2026-06-20
 > This file is the single source of truth for onboarding AI assistants.
 > Show this file at the start of any new conversation to restore full context.
 
@@ -8,27 +8,28 @@
 
 ## What is this system?
 
-**FinWatch AI** is a personal AI-powered stock monitoring and risk management system.
+**FinWatch AI** is a personal AI-powered stock monitoring and risk assessment system.
 
 It does NOT predict stock prices. It detects anomalies and risk, then produces:
 - Risk severity labels: `CRITICAL / WARNING / WATCH / NORMAL / POSITIVE_SIGNAL / REVIEW`
-- Trading signals: `ENTRY / HOLD / EXIT / NEUTRAL`
-- Human-readable explanations (via Groq LLM)
+- Risk posture signals (UI display): `FAVORABLE / MONITOR / ELEVATED`
+  - Internal codes (ENTRY/HOLD/EXIT/NEUTRAL) are mapped to display labels via `SIGNAL_DISPLAY` in `finwatch/data/loader.py`
+  - The mapping is render-time only — no pipeline logic was changed
+- Human-readable explanations (via Groq LLM + SHAP)
 
 Run via: `python src/pipeline.py`
-Dashboard via: `streamlit run finwatch/app.py`
+Dashboard via: `streamlit run finwatch/app.py` (from the `finwatch/` directory)
 
 ---
 
 ## Architecture — 8-Layer Pipeline
 
 ```
-Layer 0  — Data Ingestion          src/ingestion/download_historical.py
-Layer 1  — Data Quality            src/quality/quality_pipeline.py
-Layer 2  — Feature Engineering     src/features/feature_pipeline.py
-Layer 3  — Anomaly Detection       src/detection/detection_pipeline.py
-Layer 4  — Prediction Models       src/prediction/prediction_pipeline.py
-Layer 5  — Fundamental Collectors  src/ingestion/{earnings,insider,options,valuation,sentiment}_collector.py
+Layer 1  — Data Ingestion          src/ingestion/download_historical.py
+Layer 2  — Data Quality            src/quality/quality_pipeline.py
+Layer 3  — Feature Engineering     src/features/feature_pipeline.py
+Layer 4  — Anomaly Detection       src/detection/detection_pipeline.py
+Layer 5  — Prediction Models       src/prediction/prediction_pipeline.py
 Layer 6  — Decision Engine         src/decision/decision_engine.py + decision_pipeline.py
 Layer 7  — Explainability          src/explainability/explainability_pipeline.py
 Layer 8  — Reporting + Dashboard   src/reporting/ + finwatch/app.py
@@ -38,15 +39,15 @@ Entry point: `src/pipeline.py`
 
 ---
 
-## Detection Layer (Layer 3) — The Reliable Core
+## Detection Layer (Layer 4) — The Reliable Core
 
 Four complementary anomaly detectors, combined into a **weighted anomaly score (0–1)**:
 
 | Model | File | Weight | What it detects |
 |---|---|---|---|
-| LSTM Autoencoder | `src/detection/lstm_autoencoder.py` | 0.30 | Sequence anomalies (30 models, one per sector/volatility bucket) |
-| Isolation Forest | `src/detection/isolation_forest.py` | 0.30 | Multivariate outliers (14 models, one per sector) |
-| Z-Score | `src/detection/statistical.py` | 0.20 | Return distribution outliers |
+| LSTM Autoencoder | `src/detection/lstm_autoencoder.py` | 0.30 | Sequence anomalies (32 models: 16 sector groups × 2 vol regimes) |
+| Isolation Forest | `src/detection/isolation_forest.py` | 0.30 | Multivariate outliers (16 models, one per sector group) |
+| Return Z-Score | `src/detection/statistical.py` | 0.20 | Return distribution outliers (20d + 60d window) |
 | Sector Z-Score | `src/detection/statistical.py` | 0.20 | Stock vs sector peers |
 
 `anomaly_score_weighted` = weighted sum, 0–1 continuous.
@@ -56,41 +57,36 @@ Saved to: `data/detection/{ticker}.parquet`
 
 ---
 
-## Prediction Layer (Layer 4)
+## Prediction Layer (Layer 5)
 
 ### Drawdown Probability Model
 - **File**: `src/prediction/models/drawdown_probability.py`
-- **Type**: XGBoost binary classifier
-- **Target**: P(max drawdown > 5% in next 20 days)
-- **Performance**: AUC ~0.64 (validated on holdout 2024+)
+- **Type**: XGBoost + LightGBM (best model selected automatically at training time)
+- **Target**: P(max drawdown > 5% in next 10 days)
+- **Performance**: AUC 0.715 on holdout set (2024–2026, unseen during training)
 - **Model file**: `models/xgboost_drawdown.pkl`
 
 ### Meta-Model (Stacking Layer)
 - **File**: `src/prediction/models/meta_model.py`
 - **Type**: Logistic Regression stacking
-- **Purpose**: Combines p_drawdown + anomaly signals + VIX for a refined `p_drawdown_meta`
+- **Purpose**: Combines `p_drawdown` + anomaly signals + VIX → refined `p_drawdown_meta`
 - **Model file**: `models/meta_model.pkl`
-- **Trained on**: backtest results (walk-forward)
 
 ### XGBoost Direction Model (NOT USED IN PRODUCTION)
 - **File**: `src/prediction/models/xgboost_direction.py`
-- **Accuracy**: ~40% (barely above 33% random baseline for 3 classes)
-- **Status**: DISABLED — not called from decision pipeline
+- **Status**: DISABLED — ~40% accuracy (barely above 33% random for 3 classes)
 - **Reason**: EMH makes direction prediction near-impossible from technical data alone
-- **Model file**: `models/xgboost_direction.pkl` (kept for research only)
 
 ### XGBoost Risk Model (DEPRECATED)
 - **File**: `src/prediction/models/xgboost_risk.py`
-- **Status**: Replaced by drawdown probability model
-- **Model file**: `models/xgboost_risk.pkl` (kept for backward compat)
+- **Status**: Replaced by drawdown probability model. pkl kept for backward compat.
 
 ---
 
-## Fundamental Data Collectors (Layer 5)
+## Fundamental Data Collectors
 
 All collectors save to `data/fundamental/` as parquet files.
-They run **after** the decision pipeline (Step 7 in pipeline.py).
-This means: **the first run has no fundamentals; subsequent runs use yesterday's data (1-day lag). This is known and accepted.**
+**1-day lag**: collectors run after the decision pipeline, so the first-ever run has no fundamentals. Accepted design tradeoff.
 
 | Collector | File | Output | What it collects |
 |---|---|---|---|
@@ -100,15 +96,12 @@ This means: **the first run has no fundamentals; subsequent runs use yesterday's
 | Valuation | `src/ingestion/valuation_collector.py` | `data/fundamental/valuation.parquet` | `pe_ratio`, `pe_forward`, `pb_ratio`, `revenue_growth` |
 | Sentiment | `src/ingestion/sentiment_collector.py` | `data/fundamental/sentiment.parquet` | historical news for future training |
 
-**Valuation collector** was added in the last session. Uses Finnhub `/stock/metric?symbol=X&metric=all`.
-Tries multiple Finnhub field names: `peBasicExclExtraTTM`, `peTTM`, `pbAnnual`, `revenueGrowthTTMYoy`, `forwardPE`, etc.
-
 ---
 
 ## Decision Engine (Layer 6)
 
 ### Files
-- `src/decision/decision_engine.py` — core logic (`decide()` function)
+- `src/decision/decision_engine.py` — core logic
 - `src/decision/decision_pipeline.py` — loads all data sources, calls engine, saves output
 
 ### AnomalyInput dataclass fields
@@ -118,11 +111,15 @@ ticker, date, p_drawdown, drawdown_risk, anomaly_score, anomaly_score_weighted
 market_anomaly, sector_anomaly
 # Technical
 rsi, momentum_5, momentum_10, drawdown, obv_signal, volatility, excess_return, es_ratio, vix_level
+# MA / Regime context
+price_vs_ma200, price_vs_ma50   # stock-specific (not SPX MAs)
+regime                           # "bull" / "bear" / "transition_down" / "transition_up" / "unknown"
+volume_trend, trend_strength
 # Sentiment
 vader_score, finbert_score, news_sentiment_score
 # Fundamental
 days_to_next_earnings, insider_sentiment, put_call_ratio, options_fear
-# Valuation (added last session)
+# Valuation
 pe_ratio, pe_forward, pb_ratio, revenue_growth
 ```
 
@@ -131,37 +128,30 @@ pe_ratio, pe_forward, pb_ratio, revenue_growth
 ticker, date, severity, action, confidence, context
 p_drawdown, anomaly_score, anomaly_score_weighted, drawdown_risk
 momentum_signal, caution_flag, override_reason, summary, sentiment_note
-trading_signal  # ENTRY / HOLD / EXIT / NEUTRAL  — added last session
+trading_signal   # ENTRY / HOLD / EXIT / NEUTRAL  (internal code; UI maps to FAVORABLE/MONITOR/ELEVATED)
+anomaly_type
 ```
 
-### Severity logic (in order)
-1. `CRITICAL` — p_drawdown ≥ p_crit AND anomaly_w ≥ 0.30
-2. `CRITICAL` — actual 30d drawdown ≤ -15%
-3. `WARNING` — p_drawdown ≥ p_warn OR anomaly_w ≥ 0.30
-4. `WARNING` — actual drawdown ≤ -8%
-5. `WATCH` — anomaly_w ≥ 0.20 OR p_drawdown ≥ p_watch
-6. `POSITIVE_SIGNAL` — p_dd < 30% AND RSI < 70 AND momentum positive/pullback AND anomaly_w < 0.20
+### Severity logic (priority-ordered)
+1. `CRITICAL` — p_drawdown ≥ p_crit AND (anomaly_w ≥ 0.30 AND bearish confirmation)
+2. `CRITICAL` — actual 30d drawdown ≤ −15%
+3. `WARNING` — p_drawdown ≥ p_warn
+4. `WARNING` — actual drawdown ≤ −8%
+5. `WATCH` — anomaly_w ≥ 0.20 OR moderate p_drawdown
+6. `POSITIVE_SIGNAL` — p_dd < 30% AND RSI < 70 AND positive momentum AND anomaly_w < 0.20
 7. `NORMAL` — none of the above
 8. `REVIEW` — conflicting: high anomaly but low p_drawdown and stock outperforming
 
-VIX-aware thresholds: at low VIX (< 20), thresholds are raised to reduce false positives.
+VIX-aware: thresholds raised at low VIX (< 20) to reduce false positives in calm markets.
+Regime-aware: bear market upgrades WATCH→WARNING; blocks ENTRY signals.
 
-### Valuation logic (added last session)
-- `pe_ratio < 0` → block ENTRY ("negative earnings"), downgrade POSITIVE_SIGNAL → NORMAL
-- `pe_ratio > 50` → block ENTRY ("overvalued"), downgrade POSITIVE_SIGNAL → NORMAL
-- `pe_ratio < 15 OR pb_ratio < 1.5` → strengthen POSITIVE_SIGNAL with "cheap" note
-- `revenue_growth < -0.05` → add "revenue declining" to context
-- `pe_forward > pe_ratio * 1.2` on POSITIVE_SIGNAL → add "earnings contraction expected"
+### Risk signal (display) logic
+For WARNING severity — momentum-recovery aware:
+- Strong ML signal (`p_dd ≥ 0.50` or `anomaly_w ≥ 0.35`) + **no recovery** → **ELEVATED**
+- Strong ML signal + **recovering** (`momentum_5 > 0.03` or RSI bullish divergence) → **MONITOR**
+- Weak ML signal → **MONITOR** regardless of momentum
 
-### Trading Signal logic (added last session)
-```python
-CRITICAL / WARNING  → EXIT
-WATCH               → HOLD
-POSITIVE_SIGNAL     → ENTRY if (RSI < 45 AND pe_ratio < 35 AND revenue_growth >= -0.02)
-                      else HOLD
-NORMAL              → HOLD
-REVIEW              → NEUTRAL
-```
+Valuation gates: blocks FAVORABLE on negative or extreme P/E (> 50); strengthens on cheap fundamentals.
 
 ### Output
 Saved to: `data/decisions/decisions.parquet`
@@ -170,59 +160,88 @@ Saved to: `data/decisions/decisions.parquet`
 
 ## Backtesting
 
-**File**: `src/backtesting/backtest.py`
-
-Walk-forward setup:
-- Train: 4-year rolling window
-- Test: 6-month windows
-- No lookahead bias
-
-Outputs:
-- `data/backtesting/backtest_results.parquet` — 494 rows, per-signal with actual outcomes
-- `data/backtesting/signal_precision.parquet` — precision per severity → used as confidence base
-- `data/backtesting/anomaly_precision.parquet` — precision per anomaly detector bucket
-- `data/backtesting/summary.txt` — human-readable
-
-**Backtest validation results** (derived from historical 494 decisions):
+### Main Backtest
+- **File**: `src/backtesting/backtest.py`
+- Walk-forward: 4-year rolling train, 6-month test, 11 windows, no lookahead
+- **Results**: 683 decisions
 
 | Signal | n | Avg 20d Return | Drawdown Rate |
 |---|---|---|---|
-| ENTRY | 12 | +3.37% | 17% |
-| HOLD | 50 | +2.94% | 26% |
-| EXIT | 432 | +3.79% | 36% |
+| FAVORABLE | 2 | +2.96% | 0.0% |
+| MONITOR | 190 | +2.56% | 32.1% |
+| NEUTRAL | 62 | +3.49% | 21.0% |
+| ELEVATED | 429 | +4.90% | 44.3% |
 
-**Interpretation**: Risk ordering is correct. EXIT → more drawdowns. ENTRY → fewest drawdowns.
-Caveat: n=12 for ENTRY is small. New valuation logic not yet reflected in backtest.
+Overall (CRITICAL + WARNING vs. no-event): **Precision 41.4%, Recall 92.4%, F1 0.571**
+System is tuned for high recall — missed drawdowns cost more than false alarms.
+
+Outputs:
+- `data/backtesting/backtest_results.parquet` — 683 rows
+- `data/backtesting/signal_precision.parquet`
+- `data/backtesting/anomaly_precision.parquet`
+- `data/backtesting/summary.txt`
+
+### Baseline Comparison
+- **File**: `src/backtesting/baseline_comparison.py` (added 2026-06-20)
+- Tests 5 naive heuristics against the same 683 decisions and same target
+
+| Method | AUC | F1 |
+|---|---|---|
+| LogReg (vol + momentum) | 0.621 | 0.496 |
+| Volatility (60d realized) | 0.604 | 0.489 |
+| **FinWatch (full ML stack)** | **0.597** | **0.571** |
+| Momentum (neg 5d + MA50) | 0.540 | 0.432 |
+| RSI (overbought proxy) | 0.525 | 0.420 |
+
+**Honest read**: FinWatch trails naive baselines on pure AUC ranking (0.597 vs 0.621) but wins on F1 (+0.075) because it operates at 86% flag rate for 92.4% recall. The ML edge is recall + signal composition, not ranking.
+
+Outputs:
+- `data/backtesting/baseline_comparison.parquet`
+- `data/backtesting/baseline_comparison_summary.txt`
 
 ---
 
-## Explainability Layer (Layer 7)
+## Dashboard — 4-Screen Streamlit App
 
-- `src/explainability/finbert.py` — fetches news from Finnhub, computes VADER + Groq sentiment
-- `src/explainability/llm_narrator.py` — generates natural language narrative per ticker (Groq)
-- `src/explainability/explainability_pipeline.py` — orchestrates
+**Entry point**: `finwatch/app.py`
+**Theme**: Dark, custom CSS, EN/DE language toggle (`finwatch/ui/i18n.py`)
+**Colors**: Centralized in `finwatch/ui/theme.py` — `TEXT_MUTED`, `CHART_AXIS`, `COLOR_NEUTRAL` are single source of truth; all files import from there
+**Run from**: `finwatch/` directory (`streamlit run app.py`)
 
-Note: FinBERT was replaced with VADER + Groq in a previous session.
-`finbert_score` in the output = Groq contextual score (misleading name, kept for backcompat).
+### Screens
 
----
+| Screen | File | What it shows |
+|---|---|---|
+| Command Center | `finwatch/ui/command_center.py` | Regime banner, KPI strip, alert list, sector severity bar |
+| Stock Deep-Dive | `finwatch/ui/deep_dive.py` | Finnhub news, price chart, SHAP, radar, LLM narrative, AI chat |
+| AI Analyst | `finwatch/ui/ai_analyst.py` | Standalone AI Analyst chat page |
+| My Portfolio | `finwatch/ui/portfolio_page.py` | Positions, P&L, risk signals |
 
-## Dashboard
+### Signal display mapping (render-time only, no pipeline change)
+```python
+# finwatch/data/loader.py
+SIGNAL_DISPLAY = {
+    "ENTRY":      "FAVORABLE",
+    "BUY_SIGNAL": "FAVORABLE",
+    "HOLD":       "MONITOR",
+    "NEUTRAL":    "NEUTRAL",
+    "WATCH":      "MONITOR",
+    "EXIT":       "ELEVATED",
+    "REDUCE":     "ELEVATED",
+}
+```
 
-- **Main app**: `finwatch/app.py` — Streamlit, dark theme
-- **Pages**:
-  - Overview / Alert feed
-  - Portfolio page: `finwatch/ui/portfolio_page.py` (added recently)
-  - Components: `finwatch/ui/components.py`
-- **Data loader**: `finwatch/data/loader.py`
+### AI Analyst
+- **SDK**: Groq Python SDK, direct tool-call loop (NOT LlamaIndex)
+- **Model**: `llama-3.3-70b-versatile`
+- **Tools**: 11 tools in `src/agent/tools.py`
+- **Loop**: Synchronous, up to 8 iterations, shows tool-call chips in UI
+- **Init error handling**: `_ensure_agent()` in `chat_panel.py` logs full errors to Python logger, shows only a clean UI message (no API keys leaked)
 
-**Dashboard now displays `trading_signal` (ENTRY/HOLD/EXIT) in:**
-- Stock view: prominent badge in "AI Risk Analysis" column with color/glow
-- Strategy box: redesigned as "AI Trading Signal" panel with ML signal + context factors
-- Sidebar watchlist: signal arrow (▲/▼/◆/—) per ticker
-- SPX market overview: "AI Trading Signals" summary (ENTRY/EXIT/HOLD counts + tickers)
-- Landing page hero: "Entry Signals" count in stats
-- Portfolio page: "AI Signal" stat shows trading_signal prominently
+### Finnhub news (per-stock)
+- Added to Deep-Dive: `_render_stock_news()` calls `fetch_stock_news(ticker, limit=1)` from `finwatch/data/loader.py`
+- Cached 30 min (`@st.cache_data(ttl=1800)`)
+- Shown just below the stock header, above the anomaly profile
 
 ---
 
@@ -230,12 +249,12 @@ Note: FinBERT was replaced with VADER + Groq in a previous session.
 
 ```
 data/raw/{ticker}.parquet           ← download_historical
-data/processed/{ticker}.parquet     ← feature_pipeline
+data/features/{ticker}.parquet      ← feature_pipeline
 data/detection/{ticker}.parquet     ← detection_pipeline
-data/predictions/{ticker}.parquet   ← prediction_pipeline
 data/decisions/decisions.parquet    ← decision_pipeline
 data/fundamental/                   ← collectors (1-day lag)
-data/backtesting/                   ← backtest
+data/backtesting/                   ← backtest + baseline_comparison
+data/explanations/                  ← explainability_pipeline (SHAP + LLM)
 ```
 
 ---
@@ -256,107 +275,62 @@ models/risk_label_encoder.pkl       ← For old risk model (DEPRECATED)
 
 ## Environment / Config
 
-- **API keys needed**: `FINNHUB_API_KEY`, `GROQ_API_KEY` (in `.env`)
+- **API keys**: `FINNHUB_API_KEY`, `GROQ_API_KEY`, `TWELVE_DATA_API_KEY` — in `.env` at project root
 - **Config**: `config/assets.yaml` — ticker list + sector assignments
+- **Universe**: 58 stocks, 13 sectors, 13 sector ETF groups
 - **Requirements**: `requirements.txt`
+
+Key pinned versions: `numpy==1.26.4`, `pandas==2.2.1`, `tensorflow-macos==2.16.2`, `shap==0.49.1`
 
 ---
 
 ## Known Issues / Technical Debt
 
-1. **Fundamentals run after decisions** (pipeline.py Step 7 after Step 6):
-   Fundamentals from the previous day are used in today's decisions. First-ever run has no fundamentals. Accepted design tradeoff.
+1. **Fundamentals 1-day lag**: Collectors run after the decision pipeline. First-ever run has no fundamentals. Accepted design tradeoff.
 
-2. **Trading signal not shown in dashboard**:
-   `trading_signal` column exists in decisions.parquet but finwatch/app.py doesn't display it yet.
+2. **XGBoost direction model trained but not used**: Exists at `models/xgboost_direction.pkl`, not called anywhere in production. Research only.
 
-3. **XGBoost direction model trained but not used**:
-   The model exists at `models/xgboost_direction.pkl` but is not called anywhere in the production pipeline. Only useful for research/comparison.
+3. **Groq daily token limit (100k TPD)**: LLM narrations (Layer 7) degrade to template fallbacks when daily quota exhausted. Resets daily.
 
-4. **n=12 ENTRY signals in backtest**:
-   POSITIVE_SIGNAL is rare. ENTRY is rarer — requires above_ma200 + regime_ok + valuation_ok + revenue_ok. Backtest not yet rerun with new regime/MA-aware logic.
+4. **`market_news_title` i18n key unused**: Key exists in `finwatch/ui/i18n.py` (EN + DE) but the market news box was removed from Command Center. Key is harmless but stale.
 
-5. **lstm_inference.py missing**:
-   Required for live demo (model.save() + standalone inference script). Not yet created.
-
-6. **Groq daily token limit (100k TPD)**:
-   LLM narrations (Layer 7) degrade to template fallbacks when daily quota exhausted. Not a code error — resets daily. Consider batching or caching narratives across runs.
+5. **AUC on walk-forward (0.597) vs. model holdout (0.715)**: The two numbers measure different things. 0.715 = drawdown model AUC on its training holdout. 0.597 = AUC of p_drawdown scores on the 683 walk-forward production decisions (different population, aggressive high-recall flag rate). Both are correct; document both contexts.
 
 ---
 
-## What Was Done in the Last Two Sessions
+## What Was Done — Recent Sessions (2026-06)
 
-### Session N-1 (Valuation + Trading Signals)
-1. Created `src/ingestion/valuation_collector.py` — new file, fetches P/E, P/B, Revenue Growth from Finnhub
-2. Edited `src/decision/decision_engine.py`:
-   - Added 4 valuation fields to `AnomalyInput` dataclass
-   - Added `trading_signal` to `DecisionOutput`
-   - Added valuation logic (overvalued/cheap/declining revenue gates on ENTRY)
-   - Added trading signal logic (ENTRY/HOLD/EXIT/NEUTRAL)
-3. Edited `src/decision/decision_pipeline.py`:
-   - Added `_load_valuation_signals()` function
-   - Added step "3c/4" to load valuation before building records
-   - Passes valuation fields into records dict
-4. Edited `src/pipeline.py`:
-   - Added valuation collector import
-   - Added valuation collection call in Step 7
-5. Validated backtest: EXIT signals correctly correlate with higher drawdown rates
+### UI Redesign (branch: feature/ui-redesign)
+1. **Full dark-theme dashboard redesign** — 4 screens (Command Center, Deep-Dive, AI Analyst, My Portfolio)
+2. **Signal relabeling** — internal ENTRY/HOLD/EXIT codes mapped to FAVORABLE/MONITOR/ELEVATED at render time via `SIGNAL_DISPLAY` dict; no pipeline changes
+3. **WCAG contrast fixes** — all secondary/muted text raised to ≥ 4.5:1 contrast; colors centralized in `theme.py` (`TEXT_MUTED=#8080a4`, `CHART_AXIS=#7a9ab0`, `COLOR_NEUTRAL=#7a95ab`)
+4. **Per-stock Finnhub news** — `fetch_stock_news()` + `rel_time()` added to `finwatch/data/loader.py`; `_render_stock_news()` added to Deep-Dive below stock header
+5. **Sidebar stock selector fix** — removed custom `.sb-stock-label` div, switched to native selectbox `label_visibility="visible"` with CSS override; fixes label clipping
+6. **Chat panel init security** — `_ensure_agent()` now logs full error to Python logger, stores only clean error codes (`"missing_key"` / `"init_failed"`) in session state, never exposes API key content to UI
+7. **Market news box removed** — was added then removed (off-topic content from Finnhub `category=general`); Command Center right column now shows only Sector Severity bar
+8. **EN/DE i18n** — 4 new keys added: `stock_news_title`, `news_no_recent`, `select_stock_label`, `market_news_title` (last one unused but present)
 
-### Session N (MA/Regime Context + AUC Improvement + Bug Fixes)
-1. **Fixed SPX MA bug**: `ma50`/`ma200` in detection parquets are S&P 500 MAs (not stock MAs).
-   - Added `_compute_stock_ma_positions()` in `decision_pipeline.py` — computes per-stock MA50/MA200 from raw Close prices
-   - Added `_ma_position_at(ticker, as_of_date, data)` in `backtest.py` for walk-forward correctness
+### README Updates (2026-06-19 / 2026-06-20)
+- Real backtest numbers (683 decisions, 11 windows)
+- NEUTRAL signal row added to backtest table
+- Overall detection metrics (Precision 41.4%, Recall 92.4%, F1 0.571)
+- ETF count corrected: 11 → 13
+- Screenshots placed under correct section headers
+- "trading signal" → "risk signal" throughout; external analyst data clearly labelled
+- Key Design Decisions moved above Backtesting Results
+- Baseline comparison subsection added (honest AUC comparison vs. heuristics)
 
-2. **Enhanced `AnomalyInput` dataclass** with 5 new fields:
-   - `price_vs_ma200`, `price_vs_ma50`, `regime`, `volume_trend`, `trend_strength`
-
-3. **Improved decision logic in `decision_engine.py`**:
-   - Regime-aware: bear market → upgrades WATCH→WARNING; blocks ENTRY
-   - Overbought EXIT: RSI > 75 + >15% above MA200 + positive momentum → EXIT (profit-taking signal)
-   - WARNING→EXIT only if p_dd ≥ 0.40 or anomaly_w ≥ 0.35 (reduces false EXIT signals)
-   - ENTRY requires: above_ma200 + regime_ok + valuation_ok + revenue_ok (not just RSI)
-
-4. **Improved drawdown model AUC 0.64 → 0.6671**:
-   - Added stock-specific MA features (`price_vs_ma50_stock`, `price_vs_ma200_stock`) via `_add_stock_ma_features()`
-   - Added missing features: `anomaly_score_weighted`, `volume_trend`, `obv_signal`, `sector_relative`
-   - Tuned hyperparameters: `n_estimators=1200`, `max_depth=5`, `lr=0.015`, `min_child_weight=15`, `early_stopping_rounds=50`
-
-5. **Fixed `_prep_X()` dtype bug** — replaced `select_dtypes(include="bool")` with `pd.to_numeric(errors="coerce")` to handle object-dtype columns (`if_anomaly`, `ae_anomaly`)
-
-6. **Fixed `KeyError: 'ticker'`** in `_load_fundamental_signals()` — empty DataFrames from missing parquets
-
-7. **Fixed SHAP crash** in `src/explainability/xai.py` — same `pd.to_numeric` fix for object dtype columns
-
-8. **Full pipeline verified clean** — Layers 0–7 run without code errors (Groq LLM narrations gracefully degrade when daily quota hit)
-
----
-
-## Decision Engine — AnomalyInput Fields (Updated)
-
-```python
-# Core
-ticker, date, p_drawdown, drawdown_risk, anomaly_score, anomaly_score_weighted
-market_anomaly, sector_anomaly
-# Technical
-rsi, momentum_5, momentum_10, drawdown, obv_signal, volatility, excess_return, es_ratio, vix_level
-# MA / Regime context (added session N)
-price_vs_ma200, price_vs_ma50   # stock-specific, not SPX
-regime                           # "bull" / "bear" / "transition_down" / "transition_up" / "unknown"
-volume_trend, trend_strength
-# Sentiment
-vader_score, finbert_score, news_sentiment_score
-# Fundamental
-days_to_next_earnings, insider_sentiment, put_call_ratio, options_fear
-# Valuation
-pe_ratio, pe_forward, pb_ratio, revenue_growth
-```
+### Baseline Comparison Script (2026-06-20)
+- **New file**: `src/backtesting/baseline_comparison.py`
+- Tests Random, Volatility, Momentum, RSI, LogReg baselines against same 683 decisions
+- Computes AUC + Precision/Recall/F1 per method, prints comparison table, reports AUC/F1 edge
+- Outputs: `data/backtesting/baseline_comparison.parquet` + `baseline_comparison_summary.txt`
 
 ---
 
 ## What Still Needs To Be Done
 
-- [x] Show `trading_signal` (ENTRY/HOLD/EXIT) in the Streamlit dashboard — DONE
-- [ ] Create `lstm_inference.py` for live demo presentation
-- [ ] Rerun backtest with new valuation-aware + regime-aware trading_signal logic to get clean numbers
-- [ ] Possibly add `AVOID` signal for P/E < 0 stocks (negative earnings = don't enter under any condition)
+- [ ] Create `lstm_inference.py` for standalone LSTM-AE inference / live demo
 - [ ] Fix dashboard to show when valuation data was last updated (staleness warning)
+- [ ] Rerun baseline comparison after next model retrain to track edge over time
+- [ ] Consider `AVOID` signal for stocks with negative P/E (never enter under any condition)

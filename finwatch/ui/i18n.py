@@ -17,7 +17,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         "regime_sideways":   "Sideways",
         # ── Drawdown tooltip ───────────────────────────────────────────────────
         "dd_tip": (
-            "Probability of a significant drawdown in the next 30 days, "
+            "Probability of a significant drawdown in the next 10 days, "
             "as predicted by the XGBoost model (0 = low risk, 1 = high risk)"
         ),
         # ── Radar explanation block ────────────────────────────────────────────
@@ -56,13 +56,27 @@ _STRINGS: dict[str, dict[str, str]] = {
         "corr_sub_medium":  "Some overlap — monitor linked stocks",
         "corr_sub_high":    "Clusters with others — amplifies portfolio risk",
         # ── Outlook section ────────────────────────────────────────────────────
-        "outlook_forecast":      "Forecast · next 30 days",
+        "outlook_forecast":      "Forecast · next 10 days",
         "outlook_confidence":    "Confidence",
         "outlook_analysts":      "Analysts",
         "outlook_analysts_meta": "{total} Analysts · {period}",
         "outlook_bullish":       "Bullish",
         "outlook_no_data":       "No data available",
         "outlook_run_hint":      "run python src/data/analyst_ratings.py",
+        "outlook_no_coverage":   "No analyst coverage — this ticker is not tracked by Finnhub's recommendation database.",
+        "outlook_price_target":  "Price Target",
+        # ── Detection models section ───────────────────────────────────────────
+        "det_section_label":     "WHAT TRIGGERED THE ALERT",
+        "det_model_pattern":     "Pattern Memory",
+        "det_model_outlier":     "Outlier Detector",
+        "det_model_spike":       "Spike Detector",
+        "det_tip_pattern":       "Compares today's price and volume pattern against years of history. Fires when the recent sequence looks nothing like what it has seen before.",
+        "det_tip_outlier":       "Checks many indicators at once (volatility, volume, momentum, …). Fires when several of them are simultaneously unusual — even if each one alone looks borderline.",
+        "det_tip_spike":         "Measures how far today's price moved compared to the past 60 trading days. Fires when the move is statistically extreme — like a 2× or 3× larger day than usual.",
+        "det_agreement_3":       "All three detection methods agree — strong signal.",
+        "det_agreement_2":       "Two out of three detection methods agree.",
+        "det_agreement_1":       "Only one method flagged this — treat as early warning.",
+        "det_agreement_0":       "No detection method flagged this stock.",
         # ── Chat panel ────────────────────────────────────────────────────────
         "chat_hint_why":            "Why is this stock flagged?",
         "chat_hint_risk":           "What are the key risk metrics?",
@@ -102,7 +116,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         "regime_sideways":   "Seitwärts",
         # ── Drawdown tooltip ───────────────────────────────────────────────────
         "dd_tip": (
-            "Wahrscheinlichkeit eines signifikanten Drawdowns in den nächsten 30 Tagen, "
+            "Wahrscheinlichkeit eines signifikanten Drawdowns in den nächsten 10 Tagen, "
             "gemäß XGBoost-Modell (0 = geringes Risiko, 1 = hohes Risiko)"
         ),
         # ── Radar explanation block ────────────────────────────────────────────
@@ -141,13 +155,27 @@ _STRINGS: dict[str, dict[str, str]] = {
         "corr_sub_medium":  "Überschneidung — vernetzte Aktien beachten",
         "corr_sub_high":    "Stark verknüpft — Risikoverstärkung",
         # ── Outlook section ────────────────────────────────────────────────────
-        "outlook_forecast":      "Prognose · nächste 30 Tage",
+        "outlook_forecast":      "Prognose · nächste 10 Tage",
         "outlook_confidence":    "Konfidenz",
         "outlook_analysts":      "Analysten",
         "outlook_analysts_meta": "{total} Analysten · {period}",
         "outlook_bullish":       "Bullish",
         "outlook_no_data":       "Keine Daten verfügbar",
         "outlook_run_hint":      "python src/data/analyst_ratings.py ausführen",
+        "outlook_no_coverage":   "Kein Analyst-Coverage — dieser Ticker ist nicht in der Finnhub-Datenbank erfasst.",
+        "outlook_price_target":  "Kursziel",
+        # ── Detection models section ───────────────────────────────────────────
+        "det_section_label":     "WAS HAT DEN ALERT AUSGELÖST",
+        "det_model_pattern":     "Mustererkennung",
+        "det_model_outlier":     "Ausreißer-Detektor",
+        "det_model_spike":       "Sprung-Detektor",
+        "det_tip_pattern":       "Vergleicht das aktuelle Kurs- und Volumenmuster mit Jahren historischer Daten. Schlägt an wenn die letzten Tage so aussehen, wie das Modell es noch nie gesehen hat.",
+        "det_tip_outlier":       "Prüft viele Kennzahlen gleichzeitig (Volatilität, Volumen, Momentum, …). Schlägt an wenn mehrere davon gleichzeitig ungewöhnlich sind — auch wenn jede einzelne nur grenzwertig wäre.",
+        "det_tip_spike":         "Misst wie stark der heutige Kursbewegung im Vergleich zu den letzten 60 Handelstagen war. Schlägt an wenn die Bewegung statistisch extrem war — z.B. 2× oder 3× größer als ein normaler Tag.",
+        "det_agreement_3":       "Alle drei Methoden sind sich einig — starkes Signal.",
+        "det_agreement_2":       "Zwei von drei Methoden haben angeschlagen.",
+        "det_agreement_1":       "Nur eine Methode hat angeschlagen — als Frühwarnung werten.",
+        "det_agreement_0":       "Keine Methode hat diese Aktie markiert.",
         # ── Chat panel ────────────────────────────────────────────────────────
         "chat_hint_why":            "Warum ist diese Aktie auffällig?",
         "chat_hint_risk":           "Was sind die wichtigsten Risikokennzahlen?",

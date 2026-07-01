@@ -12,6 +12,7 @@ from ingestion.earnings_collector           import collect as collect_earnings, 
 from ingestion.insider_collector            import collect as collect_insider,   save as save_insider
 from ingestion.options_collector            import collect as collect_options,   save as save_options
 from ingestion.valuation_collector          import collect as collect_valuation, save as save_valuation
+from data.analyst_ratings                  import run as run_analyst_ratings
 from quality.quality_pipeline               import run_quality_pipeline
 from features.feature_pipeline              import run_feature_pipeline
 from detection.detection_pipeline           import run as run_detection
@@ -111,6 +112,8 @@ if __name__ == "__main__":
     valuation_df = collect_valuation()
     if not valuation_df.empty:
         print(f"Valuation saved → {save_valuation(valuation_df)}")
+
+    run_analyst_ratings()
 
     # ── Step 5: News sentiment (always runs — external APIs) ─────────────────
     print("\n" + "=" * 55)

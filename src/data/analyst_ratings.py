@@ -7,6 +7,7 @@ import sys
 import time
 import pandas as pd
 import finnhub
+import yfinance as yf
 from pathlib import Path
 
 # Make `finwatch` importable when running this script directly
@@ -18,6 +19,22 @@ from finwatch.data.loader import COMPANY_NAMES
 
 OUTPUT_PATH = Path("data/analyst_ratings.parquet")
 client = finnhub.Client(api_key=os.environ["FINNHUB_API_KEY"])
+
+
+def _fetch_price_target(ticker: str) -> tuple[float | None, float | None, float | None]:
+    """Returns (target_mean, target_high, target_low) via yfinance."""
+    try:
+        info = yf.Ticker(ticker).info
+        mean = info.get("targetMeanPrice")
+        high = info.get("targetHighPrice")
+        low  = info.get("targetLowPrice")
+        return (
+            round(float(mean), 2) if mean else None,
+            round(float(high), 2) if high else None,
+            round(float(low),  2) if low  else None,
+        )
+    except Exception:
+        return None, None, None
 
 
 def fetch_ratings(tickers: list) -> pd.DataFrame:
@@ -33,6 +50,7 @@ def fetch_ratings(tickers: list) -> pd.DataFrame:
                      latest["hold"] + latest["sell"] + latest["strongSell"])
             bullish = latest["strongBuy"] + latest["buy"]
             bearish = latest["sell"] + latest["strongSell"]
+            target_mean, target_high, target_low = _fetch_price_target(ticker)
             rows.append({
                 "ticker":        ticker,
                 "period":        latest["period"],
@@ -46,8 +64,15 @@ def fetch_ratings(tickers: list) -> pd.DataFrame:
                 "bearish":       bearish,
                 "bullish_pct":   round(bullish / total, 3) if total > 0 else None,
                 "consensus":     _consensus(bullish, latest["hold"], bearish, total),
+                "target_mean":   target_mean,
+                "target_high":   target_high,
+                "target_low":    target_low,
             })
-            print(f"  {ticker}: {bullish}/{total} bullish ({round(bullish/total*100)}%)" if total > 0 else f"  {ticker}: ok")
+            tgt_str = f"  target ${target_mean}" if target_mean else ""
+            print(
+                f"  {ticker}: {bullish}/{total} bullish ({round(bullish/total*100)}%){tgt_str}"
+                if total > 0 else f"  {ticker}: ok{tgt_str}"
+            )
         except Exception as e:
             print(f"  {ticker}: ERROR {e}")
         time.sleep(0.5)

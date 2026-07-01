@@ -42,6 +42,113 @@ _POSTURE_COLORS = {
 
 def _pd_color(p: float) -> str:
     return "#e05252" if p >= 0.70 else "#c49a3c" if p >= 0.40 else "#4a9e6a"
+
+
+def _plain_driver_explanation(feature: str, shap_val: float, det_row: "pd.Series") -> str:
+    """Return a jargon-free sentence explaining what the top SHAP feature means for this stock."""
+    sign = shap_val >= 0  # True = pushed risk UP
+
+    def _get(col, default=None):
+        v = det_row.get(col)
+        return default if v is None or (isinstance(v, float) and pd.isna(v)) else v
+
+    if feature == "trend_strength":
+        val = _get("trend_strength", 0)
+        if val < -0.03:
+            return "The stock has been falling more days than rising over the past few weeks — a clear downward trend."
+        if val > 0.03:
+            return "The stock has been rising more days than falling over the past few weeks — a clear upward trend."
+        return "The stock has had no clear direction lately — as many up-days as down-days."
+
+    if feature == "rolling_std_60":
+        val = _get("rolling_std_60", 0) * 100
+        if val < 2.0:
+            return f"Over the last 3 months, the price moved just ±{val:.1f}% per day on average — very calm."
+        if val < 4.0:
+            return f"Over the last 3 months, the price moved ±{val:.1f}% per day on average — normal range."
+        return f"Over the last 3 months, the price swung ±{val:.1f}% per day on average — unusually turbulent."
+
+    if feature == "volatility":
+        val = _get("volatility", 0) * 100
+        if val < 2.0:
+            return f"Day-to-day price swings are small right now — about ±{val:.1f}% per day."
+        if val < 4.0:
+            return f"Day-to-day price swings are moderate — about ±{val:.1f}% per day."
+        return f"Day-to-day price swings are large right now — about ±{val:.1f}% per day."
+
+    if feature == "volatility_ratio":
+        val = _get("volatility_ratio", 1)
+        return (
+            f"Recent price swings are {val:.1f}× larger than the historical average for this stock — "
+            f"{'significantly ' if val > 3 else ''}more turbulent than usual."
+        )
+
+    if feature == "volume_zscore":
+        val = _get("volume_zscore", 0)
+        if val > 1.5:
+            return f"Trading volume was {val:.1f} standard deviations above normal — significantly more shares changed hands than usual."
+        if val < -1.5:
+            return f"Trading volume was unusually low — far fewer shares traded than on a typical day."
+        return f"Trading volume was slightly {'above' if val >= 0 else 'below'} average (z-score {val:.1f})."
+
+    if feature == "beta":
+        val = _get("beta", 1)
+        if val > 2:
+            return f"This stock moves about {val:.1f}× as much as the overall market — when the market drops 1%, this stock tends to drop {val:.1f}%."
+        if val < 0.5:
+            return f"This stock barely reacts to market moves (beta {val:.2f}) — it moves mostly on its own news."
+        return f"This stock moves roughly in line with the market (beta {val:.2f})."
+
+    if feature == "var_95":
+        val = abs(_get("var_95", 0)) * 100
+        return f"On a bad day, this stock can lose up to {val:.1f}% of its value — that's the worst-case for 95% of trading days."
+
+    if feature == "max_drawdown_30d":
+        val = abs(_get("max_drawdown_30d", 0)) * 100
+        return f"The stock dropped as much as {val:.1f}% at some point in the last 30 days — that peak-to-trough fall was the key driver."
+
+    if feature == "vix_level":
+        val = _get("vix", 20)
+        if val > 30:
+            return f"The overall market fear index (VIX) is at {val:.0f} — investors are very nervous right now, which affects all stocks."
+        if val > 20:
+            return f"The overall market fear index (VIX) is at {val:.0f} — elevated anxiety in the market."
+        return f"The overall market is calm right now (VIX {val:.0f}) — no broad panic driving this signal."
+
+    if feature == "es_ratio":
+        val = _get("es_ratio", 1)
+        return f"In the worst scenarios, losses are {val:.1f}× larger than on a typical bad day — the tail risk is elevated."
+
+    if feature == "rsi":
+        val = _get("rsi", 50)
+        if val > 70:
+            return f"The stock is technically overbought (RSI {val:.0f}) — it has risen fast and may be due for a pullback."
+        if val < 30:
+            return f"The stock is technically oversold (RSI {val:.0f}) — it has fallen fast and may be due for a bounce."
+        return f"The momentum indicator (RSI {val:.0f}) is in neutral territory — no extreme reading."
+
+    if feature == "macd_hist":
+        val = _get("macd_hist", 0)
+        return (
+            "The short-term momentum is turning negative — the fast moving average crossed below the slow one, a classic early sell signal."
+            if val < 0 else
+            "The short-term momentum is picking up — the fast moving average crossed above the slow one."
+        )
+
+    if feature in ("price_vs_ma200_stock", "price_vs_ma200"):
+        val = _get("price_vs_ma200_stock") or _get("price_vs_ma200", 0)
+        pct = val * 100
+        if pct < -10:
+            return f"The price is {abs(pct):.0f}% below its 200-day average — well into long-term downtrend territory."
+        if pct > 10:
+            return f"The price is {pct:.0f}% above its 200-day average — extended above its long-term trend line."
+        return f"The price is close to its 200-day average ({pct:+.1f}%) — no strong long-term signal."
+
+    # Fallback for unknown features
+    direction = "increased" if sign else "decreased"
+    return f"Feature '{feat_label(feature)}' {direction} the risk score for this stock."
+
+
 _PERIOD_OFFSETS = {
     "1M": pd.DateOffset(months=1), "3M": pd.DateOffset(months=3),
     "6M": pd.DateOffset(months=6), "All": None,
@@ -71,7 +178,8 @@ def _parse_shap(val) -> list[tuple[str, float]]:
     return result
 
 
-def _render_outlook(dec_row: pd.Series, analyst_row: "pd.Series | None") -> None:
+def _render_outlook(dec_row: pd.Series, analyst_row: "pd.Series | None",
+                    ratings_file_exists: bool = False) -> None:
     """Side-by-side comparison: what FinWatch AI predicts vs. what analysts say."""
     signal  = str(dec_row.get("trading_signal", "—"))
     p_dd    = float(dec_row.get("p_drawdown", 0))
@@ -114,6 +222,10 @@ def _render_outlook(dec_row: pd.Series, analyst_row: "pd.Series | None") -> None
         period      = str(analyst_row.get("period", ""))[:7]
         cons_col    = _CONS_COLORS.get(consensus, "#8b8b9e")
 
+        target_mean = analyst_row.get("target_mean")
+        target_high = analyst_row.get("target_high")
+        target_low  = analyst_row.get("target_low")
+
         def _seg(n: int, color: str, label: str) -> str:
             w = round(n / total * 100) if total > 0 else 0
             return (f'<span class="ab-seg" style="width:{w}%;background:{color}" '
@@ -135,6 +247,20 @@ def _render_outlook(dec_row: pd.Series, analyst_row: "pd.Series | None") -> None
         if strong_sell: parts.append(f'<span style="color:#8c3a36">{strong_sell} Strong Sell</span>')
         breakdown = " &nbsp;·&nbsp; ".join(parts) if parts else "—"
 
+        # Price target row (only shown when data available)
+        if target_mean and str(target_mean) not in ("nan", "None", ""):
+            hi_str  = f" ↑ ${target_high:,.0f}" if target_high else ""
+            lo_str  = f" ↓ ${target_low:,.0f}"  if target_low  else ""
+            target_html = (
+                f'<div class="otl-row" style="margin-top:8px">'
+                f'<span class="otl-key">{t("outlook_price_target")}</span>'
+                f'<span class="otl-val">${target_mean:,.0f}'
+                f'<span style="font-size:11px;color:#8b8b9e">{hi_str}{lo_str}</span>'
+                f'</span></div>'
+            )
+        else:
+            target_html = ""
+
         _analysts_lbl = t("outlook_analysts")
         _analysts_meta = t("outlook_analysts_meta", total=str(total), period=period)
         an_html = f"""
@@ -144,14 +270,25 @@ def _render_outlook(dec_row: pd.Series, analyst_row: "pd.Series | None") -> None
             <div class="otl-horizon">{t("outlook_bullish")}: {bull_pct*100:.0f}%</div>
             <div class="otl-bar-wrap">{bar}</div>
             <div class="otl-breakdown">{breakdown}</div>
+            {target_html}
         </div>
         """
     else:
+        if ratings_file_exists:
+            # Parquet exists but this ticker has no Finnhub coverage
+            no_data_body = (
+                f'<div class="otl-no-data">{t("outlook_no_coverage")}</div>'
+            )
+        else:
+            # Parquet doesn't exist at all — script never run
+            no_data_body = (
+                f'<div class="otl-no-data">{t("outlook_no_data")}<br>'
+                f'<span class="otl-hint">{t("outlook_run_hint")}</span></div>'
+            )
         an_html = (
             f'<div class="outlook-col">'
             f'<div class="otl-source">{t("outlook_analysts")}</div>'
-            f'<div class="otl-no-data">{t("outlook_no_data")}<br>'
-            f'<span class="otl-hint">{t("outlook_run_hint")}</span></div>'
+            f'{no_data_body}'
             f'</div>'
         )
 
@@ -496,6 +633,68 @@ def _render_radar_explanation(keys: list, vals: list) -> None:
     )
 
 
+def _render_detection_models(det_row: pd.Series, top3_shap: list) -> None:
+    """Badge row showing which models fired + plain-language explanation of top driver."""
+    ae  = bool(det_row.get("ae_anomaly",  False))
+    iso = bool(det_row.get("if_anomaly",  False))
+    zscore = bool(det_row.get("z_anomaly", False))
+    count = sum([ae, iso, zscore])
+
+    # Colors
+    if count == 3:
+        accent = "#e05252"
+        agreement_key = "det_agreement_3"
+    elif count == 2:
+        accent = "#c49a3c"
+        agreement_key = "det_agreement_2"
+    elif count == 1:
+        accent = "#8b8b9e"
+        agreement_key = "det_agreement_1"
+    else:
+        accent = "#4a4a5a"
+        agreement_key = "det_agreement_0"
+
+    def _badge(fired: bool, label: str, tip: str) -> str:
+        if fired:
+            return (
+                f'<span class="dm-badge dm-on tip" data-tip="{tip}" '
+                f'style="border-color:{accent};color:{accent}">✓ {label}</span>'
+            )
+        return (
+            f'<span class="dm-badge dm-off tip" data-tip="{tip}">— {label}</span>'
+        )
+
+    badges = (
+        _badge(ae,     t("det_model_pattern"), t("det_tip_pattern")) +
+        _badge(iso,    t("det_model_outlier"), t("det_tip_outlier")) +
+        _badge(zscore, t("det_model_spike"),   t("det_tip_spike"))
+    )
+
+    agreement_text = t(agreement_key)
+
+    # Plain-language explanation of top SHAP driver
+    explanation_html = ""
+    if top3_shap and count > 0:
+        top_feat, top_val = top3_shap[0][0], top3_shap[0][1]
+        explanation = _plain_driver_explanation(top_feat, top_val, det_row)
+        explanation_html = (
+            f'<div class="dm-explain">'
+            f'<span class="dm-explain-lbl">What was unusual: </span>'
+            f'{html.escape(explanation)}'
+            f'</div>'
+        )
+
+    st.markdown(
+        f'<div class="dm-section">'
+        f'<div class="section-label">{t("det_section_label")}</div>'
+        f'<div class="dm-badges">{badges}</div>'
+        f'<div class="dm-agreement" style="color:{accent}">{agreement_text}</div>'
+        f'{explanation_html}'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+
 def render_metric_cards(r: pd.Series, dec_row: pd.Series) -> None:
     var_95 = float(r.get("var_95", 0))
     es_95  = float(r.get("es_95", 0))
@@ -835,6 +1034,45 @@ _DD_CSS = """
     margin-bottom:6px;line-height:1.4;
 }
 
+/* ── Detection models section ── */
+.dm-section{
+    background:#16161f;
+    border:1px solid rgba(255,255,255,0.16);
+    border-radius:8px;
+    padding:12px 14px;
+    margin-top:8px;
+    margin-bottom:10px;
+}
+.dm-badges{
+    display:flex;gap:8px;flex-wrap:wrap;
+    margin:8px 0 6px;
+}
+.dm-badge{
+    font-size:11px;font-weight:500;
+    font-family:'IBM Plex Mono',monospace;
+    letter-spacing:0.05em;
+    padding:4px 10px;border-radius:20px;
+    border:1px solid;cursor:help;
+}
+.dm-on{background:rgba(255,255,255,0.04)}
+.dm-off{border-color:#3a3a4a!important;color:#4a4a5a!important;background:transparent}
+.dm-agreement{
+    font-size:12px;font-family:'Inter',sans-serif;
+    margin-bottom:8px;font-weight:500;
+}
+.dm-explain{
+    font-size:13px;color:#c0c0d0;
+    font-family:'Inter',sans-serif;
+    line-height:1.6;
+    border-top:1px solid rgba(255,255,255,0.08);
+    padding-top:8px;margin-top:4px;
+}
+.dm-explain-lbl{
+    font-size:11px;letter-spacing:0.08em;text-transform:uppercase;
+    color:#6b6b7e;font-family:'IBM Plex Mono',monospace;
+    margin-right:4px;
+}
+
 /* ── Stock news flash (below header) ── */
 .stock-news-wrap{
     border-top:1px solid rgba(255,255,255,0.08);
@@ -983,7 +1221,8 @@ def render_deep_dive(ticker: str | None, decisions: pd.DataFrame, price_data: di
     # Analyst ratings
     analyst_row = None
     ar_df = load_analyst_ratings()
-    if ar_df is not None and not ar_df.empty:
+    ratings_file_exists = ar_df is not None and not ar_df.empty
+    if ratings_file_exists:
         ar_filt = ar_df[ar_df["ticker"] == ticker]
         if not ar_filt.empty:
             analyst_row = ar_filt.iloc[-1]
@@ -1026,7 +1265,7 @@ def render_deep_dive(ticker: str | None, decisions: pd.DataFrame, price_data: di
     _render_stock_news(fetch_stock_news(ticker, 1))
 
     # ── Outlook: FinWatch AI vs. Analysts ────────────────────────────────────────
-    _render_outlook(dec_row, analyst_row)
+    _render_outlook(dec_row, analyst_row, ratings_file_exists)
 
     # ── Period selector ─────────────────────────────────────────────────────────
     period = st.segmented_control("Period", ["1M", "3M", "6M", "All"], default="1M", key="dd_period")
@@ -1054,6 +1293,7 @@ def render_deep_dive(ticker: str | None, decisions: pd.DataFrame, price_data: di
             r = det_df.iloc[-1]
             keys, vals = _render_radar_chart(r)
             _render_radar_explanation(keys, vals)
+            _render_detection_models(r, top3_shap)
             if corr_row is not None:
                 _render_correlation_card(corr_row)
         else:
