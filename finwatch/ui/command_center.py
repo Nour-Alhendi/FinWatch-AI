@@ -517,10 +517,5 @@ def render_command_center(decisions: pd.DataFrame, price_data: dict) -> None:
 
     st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
 
-    left, right = st.columns([3, 2], gap="large")
-
-    with left:
-        _alert_list(latest, price_data, earnings_df)
-
-    with right:
-        _sector_bar(latest)
+    _alert_list(latest, price_data, earnings_df)
+    _sector_bar(latest)

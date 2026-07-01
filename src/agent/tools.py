@@ -9,6 +9,20 @@ from finwatch.data.loader import SECTORS
 
 ROOT = Path(__file__).resolve().parents[2]
 
+_SIGNAL_DISPLAY = {
+    "ENTRY":      "FAVORABLE",
+    "BUY_SIGNAL": "FAVORABLE",
+    "HOLD":       "MONITOR",
+    "WATCH":      "MONITOR",
+    "EXIT":       "ELEVATED",
+    "REDUCE":     "ELEVATED",
+    "NEUTRAL":    "NEUTRAL",
+}
+
+def _display_signal(raw: str) -> str:
+    """Translate internal trading-action codes to public risk-posture labels."""
+    return _SIGNAL_DISPLAY.get(str(raw).upper(), raw)
+
 FEATURES_DIR     = ROOT / "data/features"
 DETECTION_DIR    = ROOT / "data/detection"
 DECISIONS_DIR    = ROOT / "data/decisions"
@@ -39,7 +53,7 @@ def get_stock_analysis(ticker: str) -> dict:
     return {
         "ticker":       ticker,
         "severity":     row["severity"],
-        "signal":       row["trading_signal"],
+        "signal":       _display_signal(row["trading_signal"]),
         "p_drawdown":   row["p_drawdown"],
         "anomaly_type": anomaly_type,
         "confidence":   row["confidence"],
@@ -201,13 +215,14 @@ def get_portfolio_overview() -> dict:
     # letzte Zeile pro Ticker
     latest = df.sort_values("date").groupby("ticker").last().reset_index()
     
-    stocks = latest[["ticker", "severity", "trading_signal", "p_drawdown", "anomaly_type", "confidence"]].to_dict(orient="records")
-    
+    latest["signal"] = latest["trading_signal"].map(_display_signal)
+    stocks = latest[["ticker", "severity", "signal", "p_drawdown", "anomaly_type", "confidence"]].to_dict(orient="records")
+
     return {
-        "total_stocks":     len(latest),
-        "severity_counts":  latest["severity"].value_counts().to_dict(),
-        "signal_counts":    latest["trading_signal"].value_counts().to_dict(),
-        "stocks":           stocks,
+        "total_stocks":    len(latest),
+        "severity_counts": latest["severity"].value_counts().to_dict(),
+        "signal_counts":   {_display_signal(k): v for k, v in latest["trading_signal"].value_counts().to_dict().items()},
+        "stocks":          stocks,
     }
 
 def get_macro_context() -> dict:
@@ -293,7 +308,7 @@ def get_sector_analysis() -> dict:
         result[sector] = {
             "tickers":         group["ticker"].tolist(),
             "severity_counts": group["severity"].value_counts().to_dict(),
-            "signal_counts":   group["trading_signal"].value_counts().to_dict(),
+            "signal_counts":   {_display_signal(k): v for k, v in group["trading_signal"].value_counts().to_dict().items()},
             "avg_p_drawdown":  round(group["p_drawdown"].mean(), 3),
         }
     return result

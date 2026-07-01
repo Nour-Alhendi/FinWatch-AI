@@ -12,7 +12,7 @@ from ui.i18n import t
 from ui.theme import TEXT_MUTED
 
 # Set to False to fully hide tool-call disclosures in the chat panel.
-SHOW_TOOL_CALLS = True
+SHOW_TOOL_CALLS = False
 
 _CSS = """
 <style>
