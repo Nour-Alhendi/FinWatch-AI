@@ -436,11 +436,11 @@ def _render_price_chart(det_df: pd.DataFrame, ticker: str, period: str) -> None:
         hovertemplate="MA200 $%{y:,.2f}<extra></extra>",
     ))
 
-    # Anomaly markers — early detection only (z_anomaly / ae_anomaly)
+    # Anomaly markers — at least 2 models must agree
     has_anomalies = False
-    early_cols = [c for c in ["z_anomaly", "ae_anomaly"] if c in df.columns]
-    if early_cols:
-        early_hits = df[early_cols].any(axis=1)
+    flag_cols = [c for c in ["z_anomaly", "ae_anomaly", "if_anomaly"] if c in df.columns]
+    if flag_cols:
+        early_hits = df[flag_cols].sum(axis=1) >= 2
         anom_df    = df[early_hits]
         if not anom_df.empty:
             has_anomalies = True
