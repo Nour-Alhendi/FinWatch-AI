@@ -1,5 +1,7 @@
 # FinWatch AI
 
+Live Demo: https://finwatch-ai-wcgg63ojtduarjpvxaekmc.streamlit.app
+
 **AI-powered Financial Risk Assessment & Decision Support System**
 
 > Monitors 58 stocks across 13 sectors and 13 sector ETFs daily — detects anomalies, classifies risk severity, and produces an explainable risk signal for every asset.
